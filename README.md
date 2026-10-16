@@ -2,105 +2,109 @@
   <img src="resources/icon.png" alt="Piqi app icon" width="112" height="112" />
   <h1>Piqi</h1>
   <p><strong>Meeting answers, grounded in your product knowledge.</strong></p>
-  <p>A macOS meeting assistant with live transcripts, a searchable knowledge base, and source-linked answers.</p>
+  <p>A macOS meeting assistant with live transcription, a searchable knowledge base, and source-linked answers.</p>
 </div>
 
-Piqi helps solution architects, pre-sales engineers, and technical consultants answer product questions without searching through documents in the middle of a meeting. It listens to configured meeting audio, keeps a live transcript, finds relevant information in your sources, and presents concise answers with references in a compact on-screen Island.
+Piqi helps solution architects, pre-sales engineers, and technical consultants find reliable product and technical information while they are in a meeting. It listens to configured microphone and meeting audio, transcribes speech, searches the knowledge sources you have indexed, and presents concise answers with references in a compact on-screen Island.
 
-Piqi is a desktop assistant, not a meeting bot: it does not join calls or speak to other participants on your behalf. You review its suggestions and answer in your own words.
+Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak to other participants on your behalf. You review its suggestions and respond in your own words.
 
-## How It Works
+> **Project status:** Piqi is under active development. The current app supports live transcription, source management, and in-meeting assistance. Persistent meeting history, automatic summaries, and packaged distribution are not complete yet.
 
-1. Add product documentation, code, or other knowledge sources to Piqi.
-2. Start listening before or during a meeting. Piqi captures the microphone and, when enabled, supported meeting-app audio as separate channels.
-3. Ask Piqi a question by voice or with the configured keyboard shortcut, or let it detect a question in the other-party channel.
-4. Piqi searches the indexed sources and shows a short answer with references. Expand the answer when you need more detail.
+## What Piqi Does
 
-## Features
-
-- Live meeting transcription with separate microphone and system-audio channels.
-- Voice activation with “Selam Piqi” or the configured character name.
-- A searchable knowledge base for documents, code repositories, websites, Confluence, Notion, and approved Q&A entries.
-- Source-linked answers, with file, page, or code references where available.
-- Local folder and Git repository scanning, with folder inclusion controls and `.gitignore` support.
-- Incremental indexing and optional change watching for local sources.
-- Anthropic, Google Gemini, and OpenAI-compatible model providers, including local-compatible endpoints.
-- Privacy controls for cloud access and personal-data masking; provider credentials are stored in the macOS Keychain.
-- Meeting history, transcripts, summaries, and unanswered-question follow-up.
-- macOS voice output, with optional local EMA text-to-speech support.
+- Captures microphone and supported meeting-app audio as separate channels.
+- Shows a live transcript so you can follow what Piqi is hearing.
+- Lets you invoke Piqi by voice or open a written or spoken ask panel.
+- Searches indexed product documents, code, web pages, and connected knowledge sources.
+- Presents concise answers with source references and expandable detail where available.
+- Lets you configure one product profile with its name, sector, Piqi character, instructions, and recognition glossary.
+- Provides controls for model providers, cloud access, personal-data masking, and audit logging.
 
 ## Add Knowledge Sources
 
-Open **Sources** and choose **Add source**. Piqi supports:
+Open **Sources**, select **Add source**, and choose a source type. You can add:
 
-| Source | Examples and options |
+| Source type | What you can add |
 |---|---|
-| Documents | PDF, DOCX, PPTX, XLSX, Markdown, TXT, and HTML files or folders |
-| Code | A local repository or Git URL; review detected folders and choose what to include |
-| Web | A public URL, optionally following its sitemap within the configured page limit |
-| Confluence | Cloud or Data Center / Server spaces |
+| Documents | PDF, DOCX, PPTX, XLSX, Markdown, TXT, or HTML files and folders |
+| Code repositories | A local folder or Git URL; review detected folders and choose what to include |
+| Web | A public URL, optionally following a sitemap within a page limit |
+| Confluence | A Cloud or Data Center / Server space |
 | Notion | Pages accessible to a Notion integration |
 | Approved Q&A | Curated question-and-answer pairs for stable product facts |
 
-After indexing, the Sources screen shows each source’s status and available counts. Use **Reindex** to refresh a source manually. Local code and document sources can also be configured for change watching.
+For code repositories, Piqi scans the folder tree, observes `.gitignore` by default, and lets you choose folders and categories before indexing. Local code and document sources can be configured for change watching. The Sources screen shows source status and available counts, including indexed files, code lines, and chunks. Use **Reindex** to refresh a source manually.
 
-## During a Meeting
+## Use Piqi in a Meeting
 
-1. Add the sources you want Piqi to use and confirm that indexing has completed.
-2. Configure a model provider in **Settings → Models and providers**. Add its API key in the app settings, or configure a compatible local endpoint.
-3. Review **Settings → Privacy and compliance** to set cloud access and masking behavior for your environment.
-4. Grant the macOS permissions requested by the app, select the audio capture options, and start listening.
-5. Use the wake phrase or the in-app keyboard shortcut to ask a question. Review the answer and its source references in the Island.
+1. Add and index the documents, repositories, and other sources you want Piqi to consult.
+2. Open **Settings → Models and providers** and select a model provider. Add the provider credential in the app, or configure a compatible local endpoint.
+3. Review **Settings → Privacy and compliance**. Choose whether cloud models are allowed and whether personal data should be masked before a request is sent.
+4. Grant the macOS permissions needed for the capture options you enable. Configure microphone and system-audio capture in **Settings → Audio**.
+5. Start listening from the app or menu bar. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
+6. Say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to open the ask panel. Review the answer and its source references in the Island.
 
-The exact providers and capture options available depend on your configuration and macOS permissions. Piqi does not automatically send every source or transcript to a model: model requests are made when an answer or other configured AI task is run, subject to the selected provider and privacy policy.
+The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are listed in **Settings → Shortcuts**. Shortcut registration may fail if another application already uses the same combination.
 
-## Privacy
+## Privacy and Data Handling
 
-- Audio capture and speech-recognition behavior depend on the selected engine and macOS configuration. Piqi does not persist raw captured audio as meeting recordings.
-- When a cloud model is used, the text required for that request is sent to the selected provider. Configure provider access and personal-data masking in the app before using it with sensitive information.
+- Raw captured audio is processed as a live stream and is not saved as an audio recording.
+- Speech recognition runs on the Mac with the current Apple speech-recognition integration. Audio capture depends on the macOS permissions and sources you configure.
+- When a cloud model is selected and allowed, the text required for that model request is sent to the selected provider. Piqi does not send every indexed source or transcript automatically; requests are made for assistant tasks.
+- The privacy settings can mask detected identifiers, including national or tax IDs, IBANs, card numbers, phone numbers, and email addresses, before text is sent to a cloud model. Review the effective policy before using sensitive material.
 - Provider API keys and remote-source credentials are stored in the macOS Keychain rather than in source records.
-- Audit records are designed to contain request metadata rather than question and answer text.
-- Review your organization’s privacy, retention, and data-handling requirements before connecting sensitive sources or using a cloud provider.
+- Optional audit records contain request metadata, not question or answer text.
+- Speaker separation does not retain voiceprints; speaker labels are temporary for the listening session.
+
+These controls do not replace your organization’s privacy, security, or data-handling review. Confirm that you are authorized to connect a source and use the selected model provider with its contents.
+
+## Supported Model Providers
+
+Piqi includes adapters for Anthropic, Google Gemini, and OpenAI-compatible APIs. OpenAI-compatible endpoints can be used with hosted providers or local services such as Ollama and compatible self-hosted servers. Availability depends on provider credentials, endpoint configuration, and the active privacy policy.
 
 ## Requirements
 
 - macOS 14.4 or later
 - Node.js 23 or later
 - Xcode with Swift 6.1 or later, for the native audio helper
-- Rust toolchain, for the optional local TTS process; the version is pinned in `native/piqi-tts/rust-toolchain.toml`
+- Rust toolchain for the local text-to-speech helper; its version is pinned in `native/piqi-tts/rust-toolchain.toml`
 
-Some native dependencies may require additional downloads during the first build or first use.
+The development command builds the native helpers before starting Electron. Some native dependencies or speech models may need to be downloaded during the first build or first use.
 
 ## Run From Source
 
 ```sh
+git clone https://github.com/tuncer-byte/piqi.git
+cd piqi
 npm install
 npm run dev
 ```
+
+On first launch, macOS may request microphone, speech-recognition, and system-audio permissions. Grant only the permissions needed for the capture features you intend to use. Then configure a model provider and add at least one knowledge source before trying source-grounded answers.
 
 Useful development commands:
 
 ```sh
 npm test          # Run the test suite
-npm run typecheck # Check TypeScript projects
+npm run typecheck # Type-check the Electron and renderer projects
 npm run build     # Build native helpers and the Electron app
 npm run dist      # Package a macOS app
 ```
-
-On first launch, macOS may ask for microphone, speech-recognition, and system-audio permissions. Grant only the permissions needed for the capture features you choose to use.
 
 ## Project Layout
 
 | Path | Purpose |
 |---|---|
 | `src/main` | Electron main process, audio services, assistant, settings, and knowledge indexing |
-| `src/renderer` | Main application, settings, Sources screen, and Island interface |
+| `src/renderer` | Main application, settings, Sources and Meetings screens, and Island interface |
 | `src/preload` | Typed bridge between the renderer and Electron main process |
 | `src/shared` | Shared types, IPC contracts, provider definitions, and brand assets |
-| `native/piqi-audio` | Swift audio capture and speech-related helper |
-| `native/piqi-tts` | Rust-based local text-to-speech process |
-| `docs/PRD.md` | Product requirements and design context |
+| `native/piqi-audio` | Swift helper for audio capture, transcription, and speaker processing |
+| `native/piqi-tts` | Rust-based local text-to-speech helper |
+| `resources` | Application resources, including the Piqi icon used above |
+| `docs/PRD.md` | Product requirements and design context; some items describe future work |
 
-## Project Status
+## Contributing
 
-Piqi is under active development. Features, provider compatibility, and packaging may change. Signed distribution and a stable release process are not yet complete.
+Piqi is evolving quickly, and the product brief includes planned features that may not be present in the current app. When contributing, check the implementation and tests alongside the PRD, keep changes focused, and avoid treating roadmap items as shipped functionality.
