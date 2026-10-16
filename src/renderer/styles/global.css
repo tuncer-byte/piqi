@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* Tasarım tokenları — kaynak: Claude Design "Piqi — Uygulama Tasarımı" (PRD §6.0). */
+:root {
+  --p-bg: #f6f5f1;
+  --p-side: #edece7;
+  --p-card: #ffffff;
+  --p-fill: #f0eee8;
+  --p-fill-2: #faf9f6;
+  --p-line: #dad8d1;
+  --p-line-2: #cfcdc5;
+  --p-ink: #16161a;
+  --p-ink-2: #3a3a40;
+  --p-muted: #6a6a72;
+  --p-label: #77777f;
+  --p-on-ink: #ffffff;
+  --p-badge: #e4e2db;
+  --p-panel: #16161a;
+  --p-panel-2: #1e1e23;
+  --p-panel-3: #26262b;
+  --p-ok-bg: #ddf5e4;
+  --p-ok: #17632f;
+  --p-warn-bg: #fff0c2;
+  --p-warn: #6b4e00;
+  --p-warn-soft: #fff4d6;
+  --p-warn-ink: #5c4300;
+  --p-err: #a32d25;
+  --p-err-line: #e8b4b0;
+  --p-err-bg: #fbe9e7;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --p-bg: #131316;
+    --p-side: #0e0e10;
+    --p-card: #1c1c20;
+    --p-fill: #26262b;
+    --p-fill-2: #212126;
+    --p-line: #2c2c32;
+    --p-line-2: #3a3a42;
+    --p-ink: #f2f2f0;
+    --p-ink-2: #c8c8ce;
+    --p-muted: #9a9aa2;
+    --p-label: #8e9199;
+    --p-on-ink: #16161a;
+    --p-badge: #2a2a30;
+    --p-panel: #0b0b0d;
+    --p-panel-2: #1a1a1e;
+    --p-panel-3: #26262b;
+    --p-ok-bg: rgb(74 222 128 / 0.14);
+    --p-ok: #6ee79a;
+    --p-warn-bg: rgb(250 204 21 / 0.14);
+    --p-warn: #f0c94a;
+    --p-warn-soft: rgb(250 204 21 / 0.1);
+    --p-warn-ink: #f0c94a;
+    --p-err: #f28b82;
+    --p-err-line: #6b2f2b;
+    --p-err-bg: rgb(242 139 130 / 0.1);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --font-sans: "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --color-bg: var(--p-bg);
+  --color-side: var(--p-side);
+  --color-card: var(--p-card);
+  --color-fill: var(--p-fill);
+  --color-fill-2: var(--p-fill-2);
+  --color-line: var(--p-line);
+  --color-line-2: var(--p-line-2);
+  --color-ink: var(--p-ink);
+  --color-ink-2: var(--p-ink-2);
+  --color-muted: var(--p-muted);
+  --color-label: var(--p-label);
+  --color-on-ink: var(--p-on-ink);
+  --color-badge: var(--p-badge);
+  --color-panel: var(--p-panel);
+  --color-panel-2: var(--p-panel-2);
+  --color-panel-3: var(--p-panel-3);
+  --color-ok-bg: var(--p-ok-bg);
+  --color-ok: var(--p-ok);
+  --color-warn-bg: var(--p-warn-bg);
+  --color-warn: var(--p-warn);
+  --color-warn-soft: var(--p-warn-soft);
+  --color-warn-ink: var(--p-warn-ink);
+  --color-err: var(--p-err);
+  --color-err-line: var(--p-err-line);
+  --color-err-bg: var(--p-err-bg);
+
+  /* Sabit marka renkleri (iki temada aynı) */
+  --color-lime: #c8f169;
+  --color-on-lime: #11130a;
+  --color-live: #ff5a4f;
+
+  /* Island paleti */
+  --color-island: #0e0e10;
+  --color-island-btn: #1e1f23;
+  --color-island-field: #1a1b1f;
+  --color-island-line: #232428;
+  --color-island-code: #16171a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--p-bg);
+  color: var(--p-ink);
+  user-select: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid #c8f169;
+  outline-offset: 2px;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.selectable {
+  user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--p-muted) 35%, transparent);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}

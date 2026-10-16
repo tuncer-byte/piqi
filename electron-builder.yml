@@ -1,0 +1,26 @@
+appId: com.architecht.piqi
+productName: Piqi
+directories:
+  output: release
+files:
+  - out/**
+extraResources:
+  - from: native/piqi-audio/.build/release/piqi-audio
+    to: bin/piqi-audio
+  # FluidAudio kaynakları (konuşmacı ayrımı); CLI yanında aranır.
+  - from: native/piqi-audio/.build/release/FluidAudio_FluidAudio.bundle
+    to: bin/FluidAudio_FluidAudio.bundle
+  # EMA Lightning seslendirme yan süreci (model dosyaları ilk kullanımda indirilir).
+  - from: native/piqi-tts/target/release/piqi-tts
+    to: bin/piqi-tts
+mac:
+  icon: build/icon.icns
+  target: [dmg, zip]
+  category: public.app-category.productivity
+  minimumSystemVersion: "14.4"
+  hardenedRuntime: true
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: Piqi, konuşmanızı karşı tarafın sorularından ayırmak için mikrofonu dinler.
+    NSAudioCaptureUsageDescription: Piqi, toplantıdaki soruları algılamak için toplantı uygulamasının sesini dinler.
+    NSSpeechRecognitionUsageDescription: Piqi, konuşmaları cihaz üzerinde yazıya döker; ses Mac’inizden çıkmaz.

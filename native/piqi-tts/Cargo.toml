@@ -1,0 +1,18 @@
+[package]
+name = "piqi-tts"
+version = "0.1.0"
+edition = "2021"
+description = "Piqi seslendirme yan süreci: EMA Lightning (açık kaynak Türkçe TTS) ONNX Runtime üzerinde."
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+# EMA Lightning'in ONNX Runtime portu (Apache-2.0). Sabit commit: yeniden üretilebilir derleme.
+turkish-neural-tts = { git = "https://github.com/sewox/turkish-neural-tts", rev = "888f5b6dee48da062505302e3bf52bfc2d8727dd" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

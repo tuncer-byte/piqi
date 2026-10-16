@@ -1,0 +1,48 @@
+{
+  "name": "piqi",
+  "productName": "Piqi",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Mac toplantıları için yerel bilgi havuzu, canlı transkript ve anlık cevap asistanı",
+  "author": "Architecht",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "npm run build:native && npm run build:tts && electron-vite dev",
+    "build": "npm run build:native && npm run build:tts && npm run icons && electron-vite build",
+    "build:native": "cd native/piqi-audio && swift build -c release && codesign --force --sign - --identifier com.architecht.piqi.audio .build/release/piqi-audio",
+    "dist": "npm run build && electron-builder --mac",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run",
+    "postinstall": "node scripts/patch-electron-dev-plist.mjs",
+    "icons": "node scripts/gen-icons.mts",
+    "build:tts": "cd native/piqi-tts && cargo build --release"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@google/genai": "^2.30.0",
+    "ignore": "^7.0.12",
+    "officeparser": "^8.1.1",
+    "openai": "^7.34.0",
+    "zod": "^4.6.7",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "framer-motion": "^14.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

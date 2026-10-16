@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+release/
+.build/
+.swiftpm/
+*.log
+.DS_Store
+*.tsbuildinfo
+build/icon.iconset/
