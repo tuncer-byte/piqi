@@ -9,7 +9,7 @@ Piqi helps solution architects, pre-sales engineers, and technical consultants f
 
 Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak to other participants on your behalf. You review its suggestions and respond in your own words.
 
-> **Project status:** Piqi is under active development. The current app supports live transcription, source management, automatic answers to the other side's questions, and an approved-answer workflow. Persistent meeting history, automatic summaries, and signed packaged distribution are not complete yet.
+> **Project status:** Piqi is under active development. The current app supports meeting detection, live transcription, source management, automatic answers to the other side's questions, an approved-answer workflow, and meeting history with summaries. Notarized releases and automatic updates are not available yet; build the app locally as described below.
 
 <p align="center">
   <img src="docs/screenshots/island-ask.webp" alt="Typing a question into the ⌘⇧K ask panel and receiving a streamed answer from an approved Q&A entry, with its source" width="760" />
@@ -25,6 +25,7 @@ Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak 
 - Lets you invoke Piqi by voice or open a written or spoken ask panel.
 - Searches indexed product documents, code, web pages, and connected knowledge sources.
 - Presents concise answers with source references and expandable detail where available.
+- Keeps a history of each meeting with a summary, decisions, action items, open questions, and a follow-up email draft.
 - Collects questions it could not answer from your sources, so you can write an approved answer once and have it reused instantly.
 - Lets you configure one product profile with its name, sector, Piqi character, instructions, and recognition glossary.
 - Provides controls for model providers, cloud access, personal-data masking, and audit logging.
@@ -105,7 +106,11 @@ Press **⌘⇧Space** to answer the other side's most recent question right away
 
 **Your own questions.** Say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to type a question, as shown at the top of this page.
 
-### 6. Improve answers over time
+### 6. Review the meeting
+
+When listening stops, the meeting appears on the **Meetings** page. Piqi keeps the transcript and the answers it prepared during the meeting, and the selected model writes a summary: a title and overview, decisions, action items with owners, open questions, and a follow-up email draft you can copy. If a summary could not be created, for example because no model key is set, you can create it later with **Summarize**. Very short meetings are kept without a summary.
+
+### 7. Improve answers over time
 
 - **Add to approved answers.** When an answer is right, select **Add to FAQ** (*SSS’ye ekle*) in the Island. The next time the same question comes up, Piqi shows that approved answer immediately, without a model call.
 - **Document gaps.** Questions that had no matching source, were answered without a source, or received negative feedback are listed on the **Document gaps** page, with how often each was asked. Write an approved answer there to add it to your FAQ; the question then leaves the list.
@@ -122,7 +127,8 @@ The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are l
 - Provider API keys and remote-source credentials are stored in the macOS Keychain rather than in source records.
 - Optional audit records contain request metadata, not question or answer text.
 - Speaker separation does not retain voiceprints; speaker labels are temporary for the listening session.
-- The meeting transcript is kept in memory only (the last 15 minutes) and is not written to disk. Document gaps store only the question text, who asked, and counts, in the app's local data folder.
+- With meeting history on (the default), each meeting's transcript, Piqi's answers, and the summary are stored on this Mac and deleted after the retention period (7, 30, or 90 days; default 30). The transcript is sent to the selected model once, when the summary is created, with personal-data masking applied for cloud models. Turn history off in **Settings → Privacy and compliance** to keep the transcript in memory only (the last 15 minutes) with no summary.
+- Document gaps store only the question text, who asked, and counts, in the app's local data folder.
 
 These controls do not replace your organization’s privacy, security, or data-handling review. Confirm that you are authorized to connect a source and use the selected model provider with its contents.
 

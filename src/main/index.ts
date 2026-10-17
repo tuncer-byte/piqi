@@ -32,6 +32,8 @@ import { Assistant } from './assistant/Assistant'
 import { AudioService, type ScreenInfo } from './audio/AudioService'
 import { IslandController } from './island/IslandController'
 import { MeetingDetector } from './meeting/MeetingDetector'
+import { MeetingHistory } from './meeting/MeetingHistory'
+import { summarizeMeeting } from './meeting/summarize'
 import { AuditLog } from './llm/AuditLog'
 import { LlmService } from './llm/LlmService'
 import { PolicyService } from './PolicyService'
@@ -122,6 +124,9 @@ app.whenReady().then(async () => {
   knowledge.on('changed', () => {
     broadcast(IPC.knowledgeChanged, knowledge.overview())
   })
+  const history = new MeetingHistory(join(userData, 'meetings'), (record) => summarizeMeeting(llm, record, settings.get().product))
+  history.prune(settings.get().history.retentionDays)
+  history.on('change', (list) => broadcast(IPC.meetingsChanged, list))
   const gaps = new GapStore(join(userData, 'gaps.json'))
   gaps.on('change', (list) => broadcast(IPC.gapsChanged, list))
   /** Onaylı cevap kaydedilince aynı soru eksiklerden düşer. */
@@ -218,6 +223,8 @@ app.whenReady().then(async () => {
     meeting = on
     meetingBy = by
     meetingApp = on ? detector.current : null
+    if (on && settings.get().history.enabled) history.begin(meetingApp?.name ?? null)
+    if (!on) history.end()
     // Her yeni toplantı: konuşmacı numaraları ve adları sıfırdan.
     if (on) people.reset()
     island.setListening(on)
@@ -247,6 +254,7 @@ app.whenReady().then(async () => {
 
   const assistant = new Assistant({ llm, island, voice, transcripts, settings: getSettings, ensureMic, knowledge, gaps })
   island.on('saveFaq', (entry) => saveFaq(entry))
+  assistant.on('answered', (answer) => history.addAnswer(answer))
 
   const toggleIsland = (): void => {
     if (!islandWindow) return
@@ -286,6 +294,9 @@ app.whenReady().then(async () => {
   audio.on('transcript', (event) => {
     if (event.channel === 'them' && event.speaker != null) people.heard(event.speaker)
     transcripts.add(event, people.label(event.speaker))
+    if (meeting && event.final) {
+      history.addLine({ t: event.t, channel: event.channel, speaker: event.channel === 'me' ? 'Ben' : people.label(event.speaker), text: event.text.trim() })
+    }
     island.setTranscript(event)
     broadcast(IPC.transcript, event)
     if (event.channel === 'me') assistant.onMic(event)
@@ -363,6 +374,7 @@ app.whenReady().then(async () => {
   syncDetector()
   settings.on('change', (next: Settings) => {
     syncDetector()
+    history.prune(next.history.retentionDays)
     const key = captureKey(next)
     // Yakalama ya da uyandırma ayarı değişti: dinlemeyi yeni ayarlarla yeniden kur.
     if (key !== lastCapture) void applyCapture()
@@ -469,6 +481,13 @@ app.whenReady().then(async () => {
     saveFaq(entry)
     return knowledge.faq()
   })
+  ipcMain.handle(IPC.meetingsList, () => history.list())
+  ipcMain.handle(IPC.meetingGet, (_e, id: string) => history.get(id))
+  ipcMain.handle(IPC.meetingDelete, (_e, id: string) => {
+    history.delete(id)
+    return history.list()
+  })
+  ipcMain.on(IPC.meetingResummarize, (_e, id: string) => void history.summarize(id))
   ipcMain.handle(IPC.gapsList, () => gaps.list())
   ipcMain.handle(IPC.gapsRemove, (_e, id: string) => {
     gaps.remove(id)
@@ -534,6 +553,7 @@ app.whenReady().then(async () => {
     // Kapanışta "görüşme bitti" olayı yakalamayı yeniden kurmaya çalışmasın.
     detector.removeAllListeners()
     detector.stop()
+    history.flush()
     audio.dispose()
     ema.dispose()
     knowledge.dispose()

@@ -4,7 +4,7 @@ import { presetById } from '@shared/providers'
 import { usePolicy } from '../../shared/hooks'
 import { Lock } from '../../shared/icons'
 import type { PageProps } from '../App'
-import { Badge, Button, Card, Label, PageHeader, SettingRow, Switch } from '../ui'
+import { Badge, Button, Card, Label, PageHeader, Segmented, SettingRow, Switch } from '../ui'
 
 export function PrivacyPage({ settings, update }: PageProps): ReactNode {
   const [policy, refresh] = usePolicy()
@@ -37,6 +37,19 @@ export function PrivacyPage({ settings, update }: PageProps): ReactNode {
       status: cloud ? 'Buluta gider' : 'Kurum içi'
     },
     { data: 'Bilgi bankası indeksi, ayarlar, denetim kaydı', where: 'Bu Mac’te (SQLite)', tone: 'ok', status: 'Lokal' },
+    settings.history.enabled
+      ? { data: 'Toplantı transkripti ve geçmişi', where: `Bu Mac’te, ${settings.history.retentionDays} gün`, tone: 'ok', status: 'Lokal' }
+      : { data: 'Toplantı transkripti', where: 'Yalnızca bellekte, son 15 dakika', tone: 'ok', status: 'Lokal' },
+    ...(settings.history.enabled
+      ? [
+          {
+            data: 'Toplantı özeti',
+            where: `Toplantı bitince transkript · ${provider?.name ?? '—'}${cloud && effective.maskPII ? ' · kişisel veriler maskeli' : ''}`,
+            tone: cloud ? ('warn' as const) : ('ok' as const),
+            status: cloud ? 'Buluta gider' : 'Kurum içi'
+          }
+        ]
+      : []),
     {
       data: 'Kaynak tarama planı ve kod kartları',
       where: `Yalnızca klasör ağacı ve dosya önizlemeleri · ${provider?.name ?? '—'}`,
@@ -130,7 +143,7 @@ export function PrivacyPage({ settings, update }: PageProps): ReactNode {
                     <td className="py-2 font-mono text-[11.5px]">
                       {new Date(e.ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td>{{ assistant: 'Asistan', knowledge: 'Bilgi bankası', test: 'Test' }[e.purpose]}</td>
+                    <td>{{ assistant: 'Asistan', knowledge: 'Bilgi bankası', summary: 'Toplantı özeti', test: 'Test' }[e.purpose]}</td>
                     <td className="font-mono text-[11.5px]">{e.model}</td>
                     <td>{e.location === 'cloud' ? 'Bulut' : 'Kurum içi'}</td>
                     <td>
@@ -157,10 +170,30 @@ export function PrivacyPage({ settings, update }: PageProps): ReactNode {
           etmeni öneririz.
         </div>
       </Card>
-      <Card className="px-5 py-[18px]">
-        <SettingRow title="Transkript saklama" description="Transkript diske yazılmaz; yalnızca bellekte, son 15 dakika tutulur ve uygulama kapanınca silinir.">
-          <Badge tone="ok">Saklanmıyor</Badge>
+      <Card className="flex flex-col gap-5 px-5 py-[18px]">
+        <SettingRow
+          title="Toplantı geçmişini sakla"
+          description="Toplantı transkripti, Piqi’nin cevapları ve özet bu Mac’te saklanır. Kapalıysa transkript yalnızca bellekte, son 15 dakika tutulur ve özet çıkarılmaz."
+        >
+          <Switch
+            label="Toplantı geçmişi"
+            checked={settings.history.enabled}
+            onChange={(enabled) => update({ history: { ...settings.history, enabled } })}
+          />
         </SettingRow>
+        {settings.history.enabled && (
+          <SettingRow title="Saklama süresi" description="Süresi dolan toplantılar otomatik silinir.">
+            <Segmented
+              value={String(settings.history.retentionDays)}
+              options={[
+                { value: '7', label: '7 gün' },
+                { value: '30', label: '30 gün' },
+                { value: '90', label: '90 gün' }
+              ]}
+              onChange={(days) => update({ history: { ...settings.history, retentionDays: Number(days) } })}
+            />
+          </SettingRow>
+        )}
       </Card>
     </>
   )

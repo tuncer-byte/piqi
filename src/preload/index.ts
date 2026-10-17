@@ -65,6 +65,13 @@ const api: PiqiApi = {
   app: {
     onNavigate: (cb) => subscribe(IPC.navigate, cb)
   },
+  meetings: {
+    list: () => ipcRenderer.invoke(IPC.meetingsList),
+    get: (id) => ipcRenderer.invoke(IPC.meetingGet, id),
+    remove: (id) => ipcRenderer.invoke(IPC.meetingDelete, id),
+    resummarize: (id) => ipcRenderer.send(IPC.meetingResummarize, id),
+    onChange: (cb) => subscribe(IPC.meetingsChanged, cb)
+  },
   knowledge: {
     overview: () => ipcRenderer.invoke(IPC.knowledgeOverview),
     onChange: (cb) => subscribe(IPC.knowledgeChanged, cb),

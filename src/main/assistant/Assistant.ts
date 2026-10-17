@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { createHash, randomUUID } from 'node:crypto'
 import type { KnowledgeGap, KnowledgeHit } from '@shared/knowledge'
+import type { MeetingAnswer } from '@shared/meetings'
 import type { AskRequest, ChatView, Confidence, Settings, SourceRef, TranscriptEvent } from '@shared/types'
 import type { IslandController } from '../island/IslandController'
 import { gapKey } from '../knowledge/GapStore'
@@ -118,6 +119,8 @@ interface AssistantEvents {
   wake: []
   /** "Görüşürüz Piqi": uygulamayı kapat. */
   sleep: []
+  /** Bir soru cevaplandı (toplantı geçmişine yazılır). */
+  answered: [MeetingAnswer]
 }
 
 export class Assistant extends EventEmitter<AssistantEvents> {
@@ -269,6 +272,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     if (cached && Date.now() - cached.createdAt < ANSWER_CACHE_TTL_MS) {
       this.lastTurnAt = Date.now()
       await this.reveal({ ...cached.chat, id: randomUUID(), speaking: false }, abort.signal, spoken)
+      if (!abort.signal.aborted) this.report(question, 'Ben', cached.chat.reply, cached.chat.sources, cached.chat.confidence)
       return
     }
     if (cached) this.answerCache.delete(cacheKey)
@@ -288,6 +292,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
         confidence: 'grounded'
       }
       await this.reveal(chat, abort.signal, spoken)
+      if (!abort.signal.aborted) this.report(question, 'Ben', approved, chat.sources, 'grounded')
       return
     }
 
@@ -332,6 +337,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       this.remember(question, stripCitations(reply))
       chat = { ...chat, phase: 'done', reply: stripCitations(reply), ...citations(reply, sources.used) }
+      this.report(question, 'Ben', chat.reply, chat.sources, chat.confidence)
       if (chat.sources.length === 0 && detectQuestion(question)) {
         this.deps.gaps.add({ question, askedBy: 'Sen', reason: hits.length ? 'general' : 'no-source' })
       }
@@ -424,11 +430,9 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       const id = island.beginAnswer({ question, askedBy, short: '', sources: [], confidence: 'grounded' })
       const finished = await streamText(approved, abort.signal, (shown) => island.setAnswerText(id, shown))
       if (finished) {
-        island.completeAnswer(id, {
-          ...splitAnswer(approved),
-          sources: [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }],
-          latencyMs: Date.now() - started
-        })
+        const sources = [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }]
+        island.completeAnswer(id, { ...splitAnswer(approved), sources, latencyMs: Date.now() - started })
+        this.report(question, askedBy, approved, sources, 'grounded')
       }
       return
     }
@@ -462,6 +466,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       const cited = citations(reply, sources.used)
       island.completeAnswer(id, { ...splitAnswer(stripCitations(reply)), ...cited, latencyMs: Date.now() - started })
+      this.report(question, askedBy, stripCitations(reply), cited.sources, cited.confidence)
       if (cited.sources.length === 0) this.deps.gaps.add({ question, askedBy, reason: grounded ? 'general' : 'no-source' })
     } catch (error) {
       if (abort.signal.aborted) return
@@ -477,6 +482,10 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     if (!finished) return
     this.setChat(done)
     await sink?.end()
+  }
+
+  private report(question: string, askedBy: string, answer: string, sources: SourceRef[], confidence: Confidence): void {
+    this.emit('answered', { t: Date.now(), question, askedBy, answer, sources, confidence })
   }
 
   /**

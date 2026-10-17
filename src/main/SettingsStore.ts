@@ -12,6 +12,7 @@ export function defaultSettings(): Settings {
     capture: { mic: true, system: true, bundleIds: [] },
     hideInScreenShare: true,
     meetingDetection: 'ask',
+    history: { enabled: true, retentionDays: 30 },
     product,
     speech: { locale: 'tr-TR', transcribeThem: true, wakeWord: true, alwaysListen: true, diarization: true, autoAnswer: true },
     voice: { engine: 'apple', replies: 'auto', voiceId: null, rate: 0.52 },

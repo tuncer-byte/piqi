@@ -123,6 +123,8 @@ export interface Settings {
   hideInScreenShare: boolean
   /** Teams, Zoom vb. görüşmeye girildiğinde ne yapılacağı. */
   meetingDetection: MeetingDetection
+  /** Toplantı geçmişi: transkript, Piqi'nin cevapları ve özet bu Mac'te saklanır; süresi dolan silinir. */
+  history: { enabled: boolean; retentionDays: number }
   product: Product
   speech: {
     locale: 'tr-TR' | 'en-US'
@@ -194,7 +196,7 @@ export interface PolicyStatus {
 
 export interface AuditEntry {
   ts: number
-  purpose: 'assistant' | 'knowledge' | 'test'
+  purpose: 'assistant' | 'knowledge' | 'summary' | 'test'
   provider: string
   model: string
   location: 'cloud' | 'onprem'
