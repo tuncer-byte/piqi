@@ -105,6 +105,53 @@ export function stem(word: string): string {
   return w
 }
 
+/**
+ * Sorudaki kavramlar: her biri, metinde geçerse kavramı karşılayan biçimlerin kümesidir (kelime, Türkçe kökü
+ * ve sözlükteki İngilizce karşılıklar). "Hız sınırı" ve "rate/limit" tek kavram sayılır; böylece İngilizce
+ * bir parça Türkçe soruyu tam karşılayabilir. Sıralama ve parça kırpma için kullanılır.
+ */
+export function queryConcepts(question: string): string[][] {
+  const lower = trLower(question)
+  const all = [...new Set(tokens(question))]
+  const concepts: string[][] = []
+  const covered = new Set<string>()
+  for (const [re, words] of GLOSSARY) {
+    const match = re.exec(lower)
+    if (!match) continue
+    // Eşleşme kelime ortasında bitebilir ("hız sınır|ı"); dokunduğu kelimelerin tamamı bu kavrama aittir.
+    const own = all.filter((t) => tokens(match[0]).some((m) => t.startsWith(m) || m.startsWith(t)))
+    own.forEach((t) => covered.add(t))
+    concepts.push([...new Set([...own.flatMap((t) => [t, stem(t)]), ...words])])
+  }
+  for (const t of all) if (!covered.has(t)) concepts.push([...new Set([t, stem(t)])])
+  return concepts
+}
+
+/** Metnin kelimeleri (camelCase/snake_case parçaları dahil); `matches` ile kavram karşılığı aranır. */
+export function wordSet(text: string): Set<string> {
+  const words = new Set<string>()
+  for (const w of trLower(text).split(/[^\p{L}\p{N}]+/u)) if (w.length > 1) words.add(w)
+  for (const id of text.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? []) {
+    if (/[a-z][A-Z]|_/.test(id)) splitIdentifier(id).forEach((w) => words.add(w))
+  }
+  return words
+}
+
+/** Kavramın biçimlerinden biri metinde geçiyor mu? Kökler önek olarak eşleşir ("limit" ↔ "limitleri"). */
+export function matches(concept: string[], words: Set<string>): boolean {
+  for (const form of concept) if (words.has(form)) return true
+  const prefixes = concept.filter((form) => form.length >= 4)
+  if (!prefixes.length) return false
+  for (const w of words) for (const form of prefixes) if (w.length > form.length && w.startsWith(form)) return true
+  return false
+}
+
+/** Kavramların metinde karşılanan oranı (0–1). Kavram yoksa 1. */
+export function coverage(concepts: string[][], words: Set<string>): number {
+  if (!concepts.length) return 1
+  return concepts.filter((c) => matches(c, words)).length / concepts.length
+}
+
 /** FTS5 için kaçışlı terim. */
 const quote = (t: string): string => `"${t.replace(/"/g, '""')}"`
 

@@ -86,10 +86,9 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
     }
   }
 
-  search(question: string, limit = 6): KnowledgeHit[] {
-    const sources = this.db.sources()
-    const priority = new Set(sources.filter((s) => s.priority).map((s) => s.id))
-    return this.db.search(question, { limit, priority })
+  /** `extra`: aramayı genişleten ek metin (ör. takip sorusunda bir önceki soru). */
+  search(question: string, limit = 6, extra?: string[]): KnowledgeHit[] {
+    return this.db.search(question, { limit, extra })
   }
 
   // ── Ekleme penceresi: önizleme ─────────────────────────────────────────
