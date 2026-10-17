@@ -16,6 +16,21 @@ Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak 
 </p>
 <p align="center"><sub>⌘⇧K: a question answered from the local knowledge base, with its source.</sub></p>
 
+## Download
+
+Download the latest **`Piqi-<version>-arm64.dmg`** from the [Releases page](https://github.com/tuncer-byte/piqi/releases/latest). Piqi runs on macOS 14.4 or later on Apple silicon.
+
+1. Open the `.dmg` and drag **Piqi** to **Applications**.
+2. Open Piqi. Release builds are not yet notarized by Apple, so macOS blocks the first launch. Open **System Settings → Privacy & Security**, find the message about Piqi, and select **Open Anyway**. Alternatively, run:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Piqi.app
+   ```
+3. Piqi runs from the menu bar. Grant microphone, speech-recognition, and system-audio permission when asked.
+4. Open **Settings → Models and providers** and add a provider key or a local endpoint, then add a knowledge source.
+
+Each release lists SHA-256 checksums in `SHA256SUMS.txt`; to check a download, run `shasum -a 256 Piqi-<version>-arm64.dmg` and compare. To build the app yourself, see [Build a macOS App](#build-a-macos-app).
+
 ## What Piqi Does
 
 - Detects Teams, Zoom, Webex, Slack, FaceTime, and browser calls, and starts listening when you join (or asks first).
@@ -138,6 +153,8 @@ Piqi includes adapters for Anthropic, Google Gemini, and OpenAI-compatible APIs.
 
 ## Requirements
 
+To run a release, you need macOS 14.4 or later on Apple silicon. To build from source, you also need:
+
 - macOS 14.4 or later
 - Node.js 23 or later
 - Xcode with Swift 6.1 or later, for the native audio helper
@@ -170,7 +187,7 @@ npm run dist      # Package a signed macOS app with a Developer ID certificate
 
 Packages are written to `release/` as a `.dmg` and a `.zip` for Apple silicon. The app and its audio and speech helpers are signed with the hardened runtime and the entitlements in `build/`, so microphone capture keeps working in the packaged app.
 
-- **Without a certificate:** `npm run dist:local` signs the app ad hoc. It runs on the Mac that built it. Because ad hoc signing has no team identity, this build disables library validation (`build/entitlements.local.plist`). If you copy it to another Mac, macOS blocks the first launch; open it with Control-click → **Open**.
+- **Without a certificate:** `npm run dist:local` signs the app ad hoc. It runs on the Mac that built it. Because ad hoc signing has no team identity, this build disables library validation (`build/entitlements.local.plist`). If you copy it to another Mac, macOS blocks the first launch; allow it in **System Settings → Privacy & Security → Open Anyway**, as described in [Download](#download).
 - **With a Developer ID certificate:** `npm run dist` signs with the certificate from your keychain or from `CSC_LINK` and `CSC_KEY_PASSWORD`, using `build/entitlements.mac.plist`. To notarize, add `-c.mac.notarize=true` and provide `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`, or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
 
 On first use, macOS asks for microphone, speech-recognition, and system-audio permission for Piqi. A packaged build has a different identity from the development build, so permissions are requested again.
