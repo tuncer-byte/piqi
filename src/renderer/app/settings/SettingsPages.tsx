@@ -22,7 +22,15 @@ export function GeneralPage({ settings, update, navigate }: PageProps): ReactNod
 
   return (
     <>
-      <PageHeader title="Genel" subtitle="Piqi’yle nasıl konuşacağını ayarla." />
+      <PageHeader
+        title="Genel"
+        subtitle="Piqi’yle nasıl konuşacağını ayarla."
+        actions={
+          <Button size="sm" onClick={() => update({ onboarded: false })}>
+            Kurulumu yeniden başlat
+          </Button>
+        }
+      />
       <Card className="flex flex-col gap-5 px-5 py-[18px]">
         <SettingRow
           title={`“Selam ${settings.product.character.name}” ile uyandır`}

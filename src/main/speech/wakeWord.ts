@@ -1,8 +1,11 @@
 // "Selam Piqi" uyandırma ifadesi algılama. Konuşma tanıma "Piqi"yi çoğu zaman
-// "Piki", "Pikî", "Pi ki", "Picky", "Pixie" gibi yazar; hepsini kabul ediyoruz.
+// "Piki", "Pikî", "Pi ki", "Picky", "Pixie" gibi yazar; Apple'ın Türkçe tanıyıcısı ise sık sık
+// "peki" yazar. Selamlamadan hemen sonra geldiklerinde hepsini kabul ediyoruz.
 
 const GREETINGS = ['selam', 'merhaba', 'hey', 'hi', 'hello', 'heyy', 'alo']
 const NAME = String.raw`p[iı](?:\s|-)?(?:q|k|kk|c|ck|x)(?:i|ı|y|ie|ey|ee|si)?`
+/** Yalnızca uyandırmada: "Selam peki" doğal konuşmada neredeyse hiç geçmez, ama "peki, kapat" geçer. */
+const WAKE_NAME = String.raw`(?:${NAME}|peki)`
 
 /** Karakter adını (ör. "Gece", "Poyraz") konuşma tanımanın yazabileceği biçimlere esnetir. */
 function namePattern(name: string): string | null {
@@ -18,15 +21,15 @@ const FAREWELLS = ['görüşürüz', 'görüşmek üzere', 'hoşça kal', 'hoş�
 
 const cache = new Map<string, RegExp>()
 
-function names(extra: string[]): string {
-  return [NAME, ...extra.map(namePattern).filter((p): p is string => p != null)].join('|')
+function names(extra: string[], base = NAME): string {
+  return [base, ...extra.map(namePattern).filter((p): p is string => p != null)].join('|')
 }
 
 function wakePattern(extra: string[]): RegExp {
   const key = `wake|${extra.join('|')}`
   let re = cache.get(key)
   if (!re) {
-    re = new RegExp(String.raw`(?:^|\s)(?:${GREETINGS.join('|')})[\s,]+(${names(extra)})(?=$|[\s,.!?:;])`, 'iu')
+    re = new RegExp(String.raw`(?:^|\s)(?:${GREETINGS.join('|')})[\s,]+(${names(extra, WAKE_NAME)})(?=$|[\s,.!?:;])`, 'iu')
     cache.set(key, re)
   }
   return re

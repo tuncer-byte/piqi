@@ -4,7 +4,15 @@ import Speech
 /// Bir ses kanalını Apple'ın cihaz üzerindeki konuşma tanımasıyla yazıya döker.
 /// Konuşma, sessizlikle bölünmüş "segment"lere ayrılır: her segment için ara (partial) sonuçlar ve
 /// tek bir kesin (final) sonuç olayı yayınlanır. Ses cihazdan çıkmaz (requiresOnDeviceRecognition).
-final class ChannelTranscriber {
+/// Bir ses kanalını yazıya döken motor. macOS 26+ SpeechAnalyzer, öncesi SFSpeechRecognizer kullanır.
+protocol ChannelTranscribing: AnyObject {
+    func start()
+    func stop()
+    func append(_ buffer: AVAudioPCMBuffer)
+}
+
+/// macOS 14–15 için SFSpeechRecognizer tabanlı tanıma (macOS 26+ AnalyzerTranscriber kullanır).
+final class ChannelTranscriber: ChannelTranscribing {
     let channel: Channel
     private let recognizer: SFSpeechRecognizer
     private let silence: TimeInterval
@@ -24,6 +32,12 @@ final class ChannelTranscriber {
     private var isActive = false
 
     init(channel: Channel, locale: String, contextualStrings: [String], silence: TimeInterval) throws {
+        // İzin yokken her tanıma görevi anında hata verir; sessizce döngüye girmek yerine baştan bildir.
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized: break
+        case .notDetermined: throw PiqiError("Konuşma tanıma izni henüz verilmedi")
+        default: throw PiqiError("Konuşma tanıma izni reddedildi; Sistem Ayarları → Gizlilik ve Güvenlik → Konuşma Tanıma")
+        }
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)) else {
             throw PiqiError("Konuşma tanıma bu dili desteklemiyor: \(locale)")
         }
@@ -182,7 +196,7 @@ final class ChannelTranscriber {
 /// Ses kanallarını hem stdout'a hem (açıksa) konuşma tanımaya dağıtır.
 enum AudioRouter {
     private static let lock = NSLock()
-    private static var transcribers: [Channel: ChannelTranscriber] = [:]
+    private static var transcribers: [Channel: any ChannelTranscribing] = [:]
     /// Piqi konuşurken mikrofon tanıması duraklatılır (yankı koruması).
     static var micMuted = false
 
@@ -199,19 +213,28 @@ enum AudioRouter {
 
     static func configure(locale: String, channels: [Channel], contextualStrings: [String]) throws {
         stopAll()
-        var created: [Channel: ChannelTranscriber] = [:]
+        var created: [Channel: any ChannelTranscribing] = [:]
         for channel in channels {
             // Kendi konuşmamızda daha kısa sessizlik yeterli: komutlar ve prova cevapları çabuk kesinleşsin.
             let silence: TimeInterval = channel == .me ? 1.2 : 0.9
-            let t = try ChannelTranscriber(
-                channel: channel, locale: locale, contextualStrings: contextualStrings, silence: silence
-            )
+            let t = try makeTranscriber(channel: channel, locale: locale, contextualStrings: contextualStrings, silence: silence)
             t.start()
             created[channel] = t
         }
         lock.lock()
         transcribers = created
         lock.unlock()
+    }
+
+    /// macOS 26+ SpeechAnalyzer: uzun konuşmayı kesintisiz akışla tanır, iki kanal aynı anda çalışır ve
+    /// konuşma tanıma izni gerektirmez. Öncesinde SFSpeechRecognizer.
+    private static func makeTranscriber(channel: Channel, locale: String, contextualStrings: [String], silence: TimeInterval) throws -> any ChannelTranscribing {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            return AnalyzerTranscriber(channel: channel, locale: locale, contextualStrings: contextualStrings, silence: silence)
+        }
+        #endif
+        return try ChannelTranscriber(channel: channel, locale: locale, contextualStrings: contextualStrings, silence: silence)
     }
 
     static func stopAll() {

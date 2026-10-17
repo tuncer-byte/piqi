@@ -97,6 +97,12 @@ export class AudioService extends EventEmitter<AudioServiceEvents> {
       if (this.transcribe) this.send({ cmd: 'transcribe', ...this.transcribe })
       if (this.diarize) this.send({ cmd: 'diarize', ...this.diarize })
     } catch (error) {
+      // Yardımcı başlatma komutuna yanıt vermediyse kapat; çökme kurtarma (handleCrash) yeniden başlatır.
+      if (String(error).includes("'started'") && this.child && this.restarts < MAX_RESTARTS) {
+        console.warn('[piqi-audio] başlatma yanıtı gelmedi; yardımcı yeniden başlatılıyor')
+        this.child.kill()
+        return this.status
+      }
       this.wantRunning = false
       this.setStatus({ ...this.status, state: 'error', errors: [...this.status.errors, String(error)] })
     }
@@ -275,7 +281,12 @@ export class AudioService extends EventEmitter<AudioServiceEvents> {
         this.stopLevelTimer()
         break
       case 'transcribing':
-        this.setStatus({ ...this.status, transcribing: (event.channels as AudioChannel[]) ?? [] })
+        // Tanıma yeniden kuruldu: önceki tanıma hataları (ör. izin henüz yokken) artık geçerli değil.
+        this.setStatus({
+          ...this.status,
+          transcribing: (event.channels as AudioChannel[]) ?? [],
+          errors: this.status.errors.filter((e) => !e.startsWith('stt:'))
+        })
         break
       case 'sourceStatus': {
         const channel = event.channel === 'me' ? 'mic' : 'system'

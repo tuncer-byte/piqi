@@ -39,6 +39,15 @@ export interface AudioProcessInfo {
   isRunningInput: boolean
 }
 
+/** Piqi'nin sağlıklı çalışmasını engelleyen bir sorun ve kullanıcının tek tıkla yapabileceği çözüm. */
+export interface HealthIssue {
+  id: 'mic-permission' | 'speech-permission' | 'system-audio' | 'speech-engine' | 'model'
+  title: string
+  detail: string
+  action: 'requestMic' | 'requestSpeech' | 'openMicSettings' | 'openSpeechSettings' | 'openAudioCaptureSettings' | 'openModels'
+  actionLabel: string
+}
+
 /** Toplantı algılandığında: hiçbir şey yapma, Island'da sor ya da dinlemeyi kendiliğinden başlat. */
 export type MeetingDetection = 'off' | 'ask' | 'auto'
 
@@ -163,6 +172,8 @@ export type Permission = 'granted' | 'denied' | 'undetermined'
 export interface PermissionStatus {
   microphone: Permission
   speech: Permission
+  /** Konuşma tanıma izni bu sistemde gerekiyor mu (macOS 26+ cihaz üzerindeki tanıma izin istemez). */
+  speechRequired: boolean
 }
 
 export interface ProviderStatus {

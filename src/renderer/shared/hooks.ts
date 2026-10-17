@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { KnowledgeOverview } from '@shared/knowledge'
 import type {
+  HealthIssue,
   AudioLevels,
   CaptureStatus,
   IslandSnapshot,
@@ -24,6 +25,16 @@ export function useLevels(): AudioLevels {
   const [levels, setLevels] = useState<AudioLevels>({ me: 0, them: 0 })
   useEffect(() => window.piqi.capture.onLevels(setLevels), [])
   return levels
+}
+
+/** Piqi'nin sağlıklı çalışmasını engelleyen sorunlar; boş dizi her şeyin hazır olduğu anlamına gelir. */
+export function useHealth(): HealthIssue[] | null {
+  const [issues, setIssues] = useState<HealthIssue[] | null>(null)
+  useEffect(() => {
+    void window.piqi.health.get().then(setIssues)
+    return window.piqi.health.onChange(setIssues)
+  }, [])
+  return issues
 }
 
 export function useCaptureStatus(): CaptureStatus | null {
