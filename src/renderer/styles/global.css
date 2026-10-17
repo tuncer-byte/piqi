@@ -131,9 +131,12 @@ button:not(:disabled) {
   cursor: pointer;
 }
 
-:focus-visible {
-  outline: 2px solid #c8f169;
-  outline-offset: 2px;
+/* Katmanda: bileşendeki `focus-visible:outline-none` gibi yardımcı sınıflar bunu ezebilsin. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #c8f169;
+    outline-offset: 2px;
+  }
 }
 
 .drag {
