@@ -94,7 +94,7 @@ export function SourcesPage({ settings }: PageProps): ReactNode {
         }`}
       >
         <Upload size={18} />
-        PDF, DOCX, PPTX, XLSX, MD, TXT, HTML dosyalarını veya bir kod klasörünü buraya sürükleyin
+        PDF, DOCX, PPTX, XLSX, MD, TXT, HTML, görsel dosyalarını veya bir kod klasörünü buraya sürükleyin
       </button>
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -195,7 +195,7 @@ function OverviewMetric({ value, label }: { value: string; label: string }): Rea
 function EmptySources({ onAdd }: { onAdd: (kind: SourceKind) => void }): ReactNode {
   const items: { kind: SourceKind; tile: string; title: string; text: string }[] = [
     { kind: 'code', tile: 'KOD', title: 'Kod reposu', text: 'Yerel klasör veya Git. Yapay zeka nerenin taranacağını önerir.' },
-    { kind: 'files', tile: 'DOK', title: 'Dokümanlar', text: 'PDF, DOCX, PPTX, XLSX, MD — sayfa atıflı cevaplar.' },
+    { kind: 'files', tile: 'DOK', title: 'Dokümanlar', text: 'PDF, DOCX, PPTX, XLSX, MD ve görseller — sayfa atıflı cevaplar.' },
     { kind: 'confluence', tile: 'CNF', title: 'Confluence ve Notion', text: 'Space ve sayfalar, kullanıcıya özel jetonla.' },
     { kind: 'faq', tile: 'SSS', title: 'Onaylı cevaplar', text: 'Soru → cevap çiftleri; aramada en yüksek öncelik.' }
   ]

@@ -90,7 +90,10 @@ export class GeminiProvider implements ChatProvider {
 }
 
 function contents(request: ChatRequest) {
-  return request.messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+  return request.messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [...(m.images ?? []).map((image) => ({ inlineData: { mimeType: image.mediaType, data: image.data } })), { text: m.content }]
+  }))
 }
 
 function toLlmError(error: unknown): LlmError {

@@ -7,7 +7,7 @@ import { FilesPanel } from './FilesPanel'
 import { ConfluencePanel, FaqPanel, NotionPanel, WebPanel } from './RemotePanels'
 
 const KINDS: { kind: SourceKind; title: string; subtitle: string }[] = [
-  { kind: 'files', title: 'Dosyalar', subtitle: 'PDF · DOCX · PPTX · XLSX · MD' },
+  { kind: 'files', title: 'Dosyalar', subtitle: 'PDF · DOCX · PPTX · MD · Görsel' },
   { kind: 'code', title: 'Kod reposu', subtitle: 'Klasör veya Git URL' },
   { kind: 'web', title: 'Web sayfası', subtitle: 'URL veya site haritası' },
   { kind: 'confluence', title: 'Confluence', subtitle: 'Space ve sayfalar' },

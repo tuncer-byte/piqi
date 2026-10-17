@@ -70,7 +70,20 @@ export class AnthropicProvider implements ChatProvider {
       output_config: legacy ? {} : { effort: request.effort },
       // Ürün talimatı gibi sabit kısım önbelleğe alınır; değişken bağlam mesajlarda durur.
       system: [{ type: 'text' as const, text: request.system, cache_control: { type: 'ephemeral' as const } }],
-      messages: request.messages
+      messages: request.messages.map((m) =>
+        m.images?.length
+          ? {
+              role: m.role,
+              content: [
+                ...m.images.map((image) => ({
+                  type: 'image' as const,
+                  source: { type: 'base64' as const, media_type: image.mediaType, data: image.data }
+                })),
+                { type: 'text' as const, text: m.content }
+              ]
+            }
+          : { role: m.role, content: m.content }
+      )
     }
   }
 }

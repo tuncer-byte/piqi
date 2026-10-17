@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { KnowledgeGap } from '@shared/knowledge'
 import type { MeetingPeople, TranscriptEvent } from '@shared/types'
 import { useCaptureStatus, usePeople } from '../../shared/hooks'
 import { PiqiMark } from '../../shared/PiqiMark'
 import type { PageProps } from '../App'
-import { Badge, Button, Card, EmptyState, Label, PageHeader } from '../ui'
+import { Badge, Button, Card, EmptyState, Label, PageHeader, TextField } from '../ui'
 
 interface Line {
   key: string
@@ -52,7 +53,11 @@ export function MeetingsPage({ settings }: PageProps): ReactNode {
     <>
       <PageHeader
         title="Toplantılar"
-        subtitle={`${settings.product.name} · kayıtlı toplantı yok`}
+        subtitle={
+          status?.detectedMeeting
+            ? `${settings.product.name} · ${status.detectedMeeting} görüşmesi algılandı${status.meeting ? ', dinleniyor' : ''}`
+            : `${settings.product.name} · ${settings.meetingDetection === 'off' ? 'toplantı algılama kapalı' : 'görüşme bekleniyor; Teams, Zoom ve diğerleri otomatik algılanır'}`
+        }
         actions={
           <Button variant={listening ? 'secondary' : 'primary'} onClick={() => void (listening ? window.piqi.capture.stop() : window.piqi.capture.start())}>
             {listening ? 'Dinlemeyi durdur' : 'Dinlemeye başla'}
@@ -100,10 +105,6 @@ export function MeetingsPage({ settings }: PageProps): ReactNode {
         </div>
       </Card>
 
-      <EmptyState title="Toplantı geçmişi, özet ve aksiyonlar" milestone="M4">
-        Her toplantının transkripti, soru/cevap zaman çizelgesi, otomatik özet ve aksiyon listesi burada olacak. Şimdilik canlı
-        transkripti yukarıda görebilirsin.
-      </EmptyState>
     </>
   )
 }
@@ -177,14 +178,114 @@ function SpeakerRow(props: { id: number; name: string | null; talkSeconds: numbe
   )
 }
 
+const GAP_REASON: Record<KnowledgeGap['reason'], { label: string; tone: 'warn' | 'err' | 'neutral' }> = {
+  'no-source': { label: 'Kaynakta yok', tone: 'warn' },
+  general: { label: 'Kaynaksız cevaplandı', tone: 'neutral' },
+  negative: { label: 'Olumsuz geri bildirim', tone: 'err' }
+}
+
+function ago(t: number): string {
+  const minutes = Math.round((Date.now() - t) / 60_000)
+  if (minutes < 1) return 'az önce'
+  if (minutes < 60) return `${minutes} dk önce`
+  const hours = Math.round(minutes / 60)
+  return hours < 24 ? `${hours} sa önce` : `${Math.round(hours / 24)} gün önce`
+}
+
+function useGaps(): KnowledgeGap[] | null {
+  const [gaps, setGaps] = useState<KnowledgeGap[] | null>(null)
+  useEffect(() => {
+    void window.piqi.knowledge.gaps().then(setGaps)
+    return window.piqi.knowledge.onGapsChange(setGaps)
+  }, [])
+  return gaps
+}
+
 export function GapsPage({ settings }: PageProps): ReactNode {
+  const gaps = useGaps()
+  const total = gaps?.reduce((n, g) => n + g.count, 0) ?? 0
   return (
     <>
-      <PageHeader title="Doküman eksikleri" subtitle={`${settings.product.name} · cevaplanamayan sorular`} />
-      <EmptyState title="Henüz eksik yok" milestone="M4">
-        Toplantıda kaynakta karşılığı bulunamayan veya olumsuz geri bildirim alan sorular burada toplanır; her birine onaylı cevap yazıp SSS’ye
-        ekleyebilirsin. Piqi böylece her toplantıda biraz daha iyi olur.
-      </EmptyState>
+      <PageHeader
+        title="Doküman eksikleri"
+        subtitle={`${settings.product.name} · ${gaps?.length ? `${gaps.length} soru · toplam ${total} kez soruldu` : 'cevaplanamayan sorular'}`}
+      />
+      {gaps && gaps.length === 0 && (
+        <EmptyState title="Henüz eksik yok">
+          Toplantıda kaynakta karşılığı bulunamayan, kaynaksız cevaplanan veya olumsuz geri bildirim alan sorular burada toplanır. Her birine onaylı cevap yazıp
+          SSS’ye eklediğinde, aynı soru bir dahaki sefere model çağrılmadan anında cevaplanır.
+        </EmptyState>
+      )}
+      {gaps && gaps.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {gaps.map((gap) => (
+            <GapRow key={gap.id} gap={gap} />
+          ))}
+        </div>
+      )}
     </>
+  )
+}
+
+function GapRow({ gap }: { gap: KnowledgeGap }): ReactNode {
+  const [open, setOpen] = useState(false)
+  const [answer, setAnswer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const reason = GAP_REASON[gap.reason]
+  const save = async (): Promise<void> => {
+    if (!answer.trim()) return
+    setBusy(true)
+    // Kaydedilince main eksikten düşürür ve liste kendiliğinden güncellenir.
+    await window.piqi.knowledge.saveFaq({ question: gap.question, answer: answer.trim() }).finally(() => setBusy(false))
+  }
+  return (
+    <Card className="px-5 py-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[15.5px] font-semibold leading-snug">“{gap.question}”</div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
+            <Badge tone={reason.tone}>{reason.label}</Badge>
+            <span>{gap.askedBy}</span>
+            <span>·</span>
+            <span>{ago(gap.lastAt)}</span>
+            {gap.count > 1 && (
+              <>
+                <span>·</span>
+                <span className="font-semibold text-ink-2">{gap.count} kez soruldu</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {!open && (
+            <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
+              Cevap yaz
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => void window.piqi.knowledge.removeGap(gap.id)}>
+            Yoksay
+          </Button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-4 flex flex-col gap-3">
+          <TextField
+            label="Onaylı cevap"
+            multiline
+            value={answer}
+            onChange={setAnswer}
+            placeholder="Müşteriye söyleyeceğin doğrulanmış cevap. Kısa ve kesin tut; ilk cümle Island’da büyük gösterilir."
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button size="sm" variant="lime" disabled={!answer.trim() || busy} onClick={() => void save()}>
+              SSS’ye ekle
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }

@@ -29,7 +29,8 @@ describe('Assistant repeat-answer cache', () => {
       transcripts: { recent: () => '' } as unknown as TranscriptStore,
       settings: () => settings,
       ensureMic: async () => undefined,
-      knowledge: { search: () => [] }
+      knowledge: { search: () => [] },
+      gaps: { add: vi.fn() }
     })
 
     assistant.ask({ text: 'Rate limit kaç?', useMeetingContext: false, detailed: false })
@@ -51,6 +52,7 @@ function setup(hits: KnowledgeHit[], reply = 'Cevap [1].') {
     return reply
   })
   const search = vi.fn((_question: string, _limit?: number, _extra?: string[]) => hits)
+  const gaps = { add: vi.fn() }
   const voice = Object.assign(new EventEmitter(), {
     shouldSpeak: async () => false,
     stop: vi.fn(),
@@ -63,9 +65,10 @@ function setup(hits: KnowledgeHit[], reply = 'Cevap [1].') {
     transcripts: { recent: () => '' } as unknown as TranscriptStore,
     settings: () => settings,
     ensureMic: async () => undefined,
-    knowledge: { search }
+    knowledge: { search },
+    gaps
   })
-  return { assistant, chats, streamText, search }
+  return { assistant, chats, streamText, search, gaps }
 }
 
 const hit = (text: string, extra: Partial<KnowledgeHit> = {}): KnowledgeHit => ({
@@ -146,5 +149,102 @@ describe('Assistant token ve hız iyileştirmeleri', () => {
     expect(search.mock.calls[1]![2]).toEqual(['Webhook rate limit kaç?'])
     const history = streamText.mock.calls[1]![0].messages[1]!.content
     expect(history.length).toBeLessThanOrEqual(601)
+  })
+})
+describe('Assistant karşı tarafın sorusu', () => {
+  function auto(hits: KnowledgeHit[], reply = 'Dakikada 600 istek [1].') {
+    const settings = defaultSettings()
+    const streamText = vi.fn(async (request: { onText: (delta: string) => void }) => {
+      request.onText(reply)
+      return reply
+    })
+    const island = {
+      setChat: vi.fn(),
+      showQuestion: vi.fn(),
+      beginAnswer: vi.fn(() => 'card-1'),
+      setAnswerText: vi.fn(),
+      completeAnswer: vi.fn()
+    }
+    const gaps = { add: vi.fn() }
+    const voice = Object.assign(new EventEmitter(), { shouldSpeak: async () => false, stop: vi.fn(), sentences: vi.fn() })
+    const assistant = new Assistant({
+      llm: { streamText } as unknown as LlmService,
+      island: island as unknown as IslandController,
+      voice: voice as unknown as VoiceOutput,
+      transcripts: { recent: () => '' } as unknown as TranscriptStore,
+      settings: () => settings,
+      ensureMic: async () => undefined,
+      knowledge: { search: () => hits },
+      gaps
+    })
+    const say = (text: string): void => assistant.onTheirs({ channel: 'them', segment: 1, text, final: true, t: Date.now() }, 'Elif')
+    return { say, island, gaps, streamText, settings, assistant }
+  }
+
+  it('güçlü kaynak varsa Island’da kaynaklı cevap hazırlar', async () => {
+    const { say, island, streamText } = auto([hit('API anahtarı başına dakikada 600 istek.', { coverage: 1 })])
+    say('Rate limit aşılırsa ne oluyor?')
+    await vi.waitFor(() => expect(island.completeAnswer).toHaveBeenCalled())
+    expect(island.showQuestion).toHaveBeenCalledWith('Rate limit aşılırsa ne oluyor?', 'Elif')
+    expect(streamText).toHaveBeenCalledTimes(1)
+    expect(island.completeAnswer.mock.calls[0]![1]).toMatchObject({
+      short: 'Dakikada 600 istek.',
+      sources: [{ label: 'API-Guide.pdf · s.14' }],
+      confidence: 'grounded'
+    })
+  })
+
+  it('kaynak zayıfsa model çağırmadan doküman eksiklerine yazar', () => {
+    const { say, island, gaps, streamText } = auto([hit('Tema seçimi.', { coverage: 0.2 })])
+    say('SLA oranınız nedir?')
+    expect(streamText).not.toHaveBeenCalled()
+    expect(island.showQuestion).not.toHaveBeenCalled()
+    expect(gaps.add).toHaveBeenCalledWith({ question: 'SLA oranınız nedir?', askedBy: 'Elif', reason: 'no-source' })
+  })
+
+  it('lojistik cümleleri, tekrarları ve kapalı ayarı yok sayar', async () => {
+    const { say, island, settings } = auto([hit('API anahtarı başına dakikada 600 istek.', { coverage: 1 })])
+    say('Beni duyabiliyor musunuz?')
+    expect(island.showQuestion).not.toHaveBeenCalled()
+    say('Rate limit aşılırsa ne oluyor?')
+    await vi.waitFor(() => expect(island.completeAnswer).toHaveBeenCalledTimes(1))
+    say('Rate limitler aşılırsa ne olur?')
+    expect(island.showQuestion).toHaveBeenCalledTimes(1)
+    settings.speech.autoAnswer = false
+    say('Webhook yeniden denemesi nasıl çalışıyor?')
+    expect(island.showQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('onaylı SSS birebir eşleşirse modeli çağırmadan akışla cevaplar', async () => {
+    const faq = hit('Soru: Enterprise pakette rate limit kaç?\nOnaylı cevap: Dakikada 6000 istek.', {
+      kind: 'faq',
+      label: 'SSS',
+      title: 'Enterprise pakette rate limit kaç?',
+      coverage: 1
+    })
+    const { say, island, streamText } = auto([faq])
+    say('Enterprise paketinde rate limit kaçtır?')
+    await vi.waitFor(() => expect(island.completeAnswer).toHaveBeenCalled(), { timeout: 2_000 })
+    expect(streamText).not.toHaveBeenCalled()
+    expect(island.completeAnswer.mock.calls[0]![1]).toMatchObject({ short: 'Dakikada 6000 istek.', sources: [{ label: 'SSS' }] })
+  })
+
+  it('Şimdi cevapla: otomatik cevap kapalıyken de son soruyu cevaplar', async () => {
+    const { say, island, streamText, settings, assistant } = auto([hit('API anahtarı başına dakikada 600 istek.', { coverage: 1 })])
+    settings.speech.autoAnswer = false
+    say('Rate limit aşılırsa ne oluyor?')
+    say('Bunu not alalım.')
+    expect(island.showQuestion).not.toHaveBeenCalled()
+    assistant.answerNow()
+    await vi.waitFor(() => expect(island.completeAnswer).toHaveBeenCalled())
+    expect(island.showQuestion).toHaveBeenCalledWith('Rate limit aşılırsa ne oluyor?', 'Elif')
+    expect(streamText).toHaveBeenCalledTimes(1)
+  })
+
+  it('Şimdi cevapla: henüz soru duyulmadıysa açıklayıcı hata gösterir', () => {
+    const { island, streamText, assistant } = auto([])
+    assistant.answerNow()
+    expect(streamText).not.toHaveBeenCalled()
+    expect(island.setChat).toHaveBeenCalledWith(expect.objectContaining({ phase: 'error' }))
   })
 })

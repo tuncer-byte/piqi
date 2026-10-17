@@ -1,9 +1,16 @@
 import type { z } from 'zod'
 import type { Effort, ModelInfo } from '@shared/types'
 
+/** Mesaja eklenen görsel (base64). Yalnızca kullanıcı mesajlarında, metinden önce gönderilir. */
+export interface ImageInput {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+  data: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  images?: ImageInput[]
 }
 
 export interface ChatRequest {

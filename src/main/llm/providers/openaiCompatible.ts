@@ -5,7 +5,7 @@ import { LlmError, parseJsonText, type ChatProvider, type ChatRequest } from '..
 
 /**
  * OpenAI Chat Completions uyumlu her uç nokta: OpenAI, Qwen (QwenCloud), DeepSeek, Mistral,
- * Ollama ve bankanın kendi veri merkezindeki vLLM / LM Studio sunucuları.
+ * Ollama ve kurumun kendi veri merkezindeki vLLM / LM Studio sunucuları.
  */
 export class OpenAICompatibleProvider implements ChatProvider {
   private readonly client: OpenAI
@@ -88,7 +88,20 @@ export class OpenAICompatibleProvider implements ChatProvider {
   }
 
   private messages(request: ChatRequest): OpenAI.Chat.ChatCompletionMessageParam[] {
-    return [{ role: 'system', content: request.system }, ...request.messages]
+    return [
+      { role: 'system', content: request.system },
+      ...request.messages.map((m): OpenAI.Chat.ChatCompletionMessageParam =>
+        m.role === 'user' && m.images?.length
+          ? {
+              role: 'user',
+              content: [
+                ...m.images.map((image) => ({ type: 'image_url' as const, image_url: { url: `data:${image.mediaType};base64,${image.data}` } })),
+                { type: 'text' as const, text: m.content }
+              ]
+            }
+          : { role: m.role, content: m.content }
+      )
+    ]
   }
 
   private toLlmError(error: unknown): LlmError {

@@ -11,8 +11,9 @@ export function defaultSettings(): Settings {
   return {
     capture: { mic: true, system: true, bundleIds: [] },
     hideInScreenShare: true,
+    meetingDetection: 'ask',
     product,
-    speech: { locale: 'tr-TR', transcribeThem: true, wakeWord: true, alwaysListen: true, diarization: true },
+    speech: { locale: 'tr-TR', transcribeThem: true, wakeWord: true, alwaysListen: true, diarization: true, autoAnswer: true },
     voice: { engine: 'apple', replies: 'auto', voiceId: null, rate: 0.52 },
     providers: {},
     model: { providerId: 'anthropic', id: DEFAULT_MODEL, effort: 'low' },

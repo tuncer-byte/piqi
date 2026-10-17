@@ -3,7 +3,7 @@ import type { DataPolicy, PolicyStatus, Settings } from '@shared/types'
 import { presetById } from '@shared/providers'
 
 /**
- * Kurumsal (MDM) politika dosyası. Bankanın BT ekibi Jamf/Intune ile dağıtır; kullanıcı değiştiremez.
+ * Kurumsal (MDM) politika dosyası. Kurumun BT ekibi Jamf/Intune ile dağıtır; kullanıcı değiştiremez.
  *
  * Örnek /Library/Application Support/Piqi/policy.json:
  * {

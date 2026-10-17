@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.architecht.piqi.audio</string>
+	<string>io.github.tuncer-byte.piqi.audio</string>
 	<key>CFBundleName</key>
 	<string>piqi-audio</string>
 	<key>CFBundleVersion</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Piqi, konuşmanızı karşı tarafın sorularından ayırmak için mikrofonu dinler.</string>
 	<key>NSAudioCaptureUsageDescription</key>

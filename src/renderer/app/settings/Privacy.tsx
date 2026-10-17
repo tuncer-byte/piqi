@@ -4,7 +4,7 @@ import { presetById } from '@shared/providers'
 import { usePolicy } from '../../shared/hooks'
 import { Lock } from '../../shared/icons'
 import type { PageProps } from '../App'
-import { Badge, Button, Card, Label, PageHeader, Segmented, SettingRow, Switch } from '../ui'
+import { Badge, Button, Card, Label, PageHeader, SettingRow, Switch } from '../ui'
 
 export function PrivacyPage({ settings, update }: PageProps): ReactNode {
   const [policy, refresh] = usePolicy()
@@ -63,7 +63,7 @@ export function PrivacyPage({ settings, update }: PageProps): ReactNode {
         </div>
         <DarkRow
           title="Bulut modellerine izin ver"
-          text="Kapalıyken yalnızca kurum içi sunucular (vLLM, Ollama) kullanılabilir; hiçbir metin bankanın ağı dışına çıkmaz."
+          text="Kapalıyken yalnızca kurum içi sunucular (vLLM, Ollama) kullanılabilir; hiçbir metin kurum ağının dışına çıkmaz."
           checked={effective.allowCloud}
           disabled={managed}
           onChange={(allowCloud) => setPolicy({ allowCloud })}
@@ -158,8 +158,8 @@ export function PrivacyPage({ settings, update }: PageProps): ReactNode {
         </div>
       </Card>
       <Card className="px-5 py-[18px]">
-        <SettingRow title="Transkript saklama süresi" description="Toplantı geçmişi (M4) ile gelecek. Şu an transkript yalnızca bellekte, son 15 dakika tutulur.">
-          <Segmented value="none" options={[{ value: 'none', label: 'Saklanmıyor' }]} onChange={() => undefined} />
+        <SettingRow title="Transkript saklama" description="Transkript diske yazılmaz; yalnızca bellekte, son 15 dakika tutulur ve uygulama kapanınca silinir.">
+          <Badge tone="ok">Saklanmıyor</Badge>
         </SettingRow>
       </Card>
     </>

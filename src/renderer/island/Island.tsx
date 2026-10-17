@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Close, Pin, Stop } from '../shared/icons'
 import { PiqiMark, Wordmark, type MarkState } from '../shared/PiqiMark'
 import { AnswerBody } from './AnswerBody'
 import { AskBody, ChatBody } from './AskBody'
-import { act, formatLatency, GhostIcon, LevelBars, ProductTag } from './parts'
+import { act, formatLatency, GhostIcon, LevelBars, PillButton, ProductTag } from './parts'
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 } as const
 const NO_NOTCH_BAR = 32
@@ -125,6 +125,21 @@ function Body({ snapshot, levels }: { snapshot: IslandSnapshot; levels: AudioLev
       return <AskBody listening={snapshot.listening} />
     case 'chat':
       return <ChatBody chat={view.chat} levels={levels} expanded={snapshot.expanded} />
+    case 'meetingPrompt':
+      return (
+        <div className="flex items-center justify-between gap-4 px-[26px] pb-5 pt-1.5">
+          <div className="min-w-0">
+            <div className="text-[17px] font-medium leading-[1.35] text-[#F2F2F0]">{view.app} görüşmesi algılandı</div>
+            <div className="mt-0.5 text-[12.5px] text-[#8E9199]">Dinlersem karşı tarafın sorularına kaynaklı cevap hazırlarım.</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <PillButton onClick={() => act({ type: 'meetingDismiss' })}>Şimdi değil</PillButton>
+            <PillButton variant="lime" onClick={() => act({ type: 'meetingStart' })}>
+              Dinlemeye başla
+            </PillButton>
+          </div>
+        </div>
+      )
     default:
       return null
   }

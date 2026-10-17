@@ -62,6 +62,14 @@ export class LlmService {
     })
   }
 
+  /** Etkin model nereye gidiyor ve politika izin veriyor mu (ör. görsel analizini önceden bildirmek için). */
+  target(): { name: string; model: string; location: 'cloud' | 'onprem'; blocked: string | null } | null {
+    const settings = this.settings()
+    const preset = presetById(settings.model.providerId)
+    if (!preset) return null
+    return { name: preset.name, model: settings.model.id, location: preset.location, blocked: this.policy.check(settings, preset.id) }
+  }
+
   async listModels(providerId: string): Promise<ModelInfo[]> {
     const preset = presetById(providerId)
     if (!preset) return []
@@ -104,6 +112,7 @@ export class LlmService {
     const masker = preset.location === 'cloud' && policy.maskPII ? new Masker() : null
     const chat: ChatRequest = {
       system: masker ? masker.mask(request.system) : request.system,
+      // Metin maskelenir; görsel içeriği maskelenemez (politika denetimi yine uygulanır).
       messages: request.messages.map((m) => ({ ...m, content: masker ? masker.mask(m.content) : m.content })),
       model: model.id,
       effort: request.effort ?? model.effort,
@@ -132,6 +141,7 @@ export class LlmService {
           inputChars: chat.system.length + chat.messages.reduce((n, m) => n + m.content.length, 0),
           outputChars: output.length,
           masked: masker?.counts() ?? {},
+          images: chat.messages.reduce((n, m) => n + (m.images?.length ?? 0), 0) || undefined,
           ms: Date.now() - started,
           ok: error == null,
           error: error ? (error as Error).message : undefined

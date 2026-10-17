@@ -121,7 +121,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyRequired: false,
     keyHint: 'isteğe bağlı',
     models: [],
-    docs: 'Bankanın veri merkezindeki model sunucusu, örn. https://llm.kurum.local/v1'
+    docs: 'Kurumun veri merkezindeki model sunucusu, örn. https://llm.kurum.local/v1'
   }
 ]
 

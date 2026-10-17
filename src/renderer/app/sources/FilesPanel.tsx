@@ -111,7 +111,7 @@ export function FilesPanel({ close, initialPaths }: PanelProps): ReactNode {
             <Upload size={26} className="text-ink-2" />
             <div>
               <div className="text-[15px] font-bold">Dosyaları veya klasörü buraya bırakın</div>
-              <div className="mt-1 text-[13px] text-muted">PDF, DOCX, PPTX, XLSX, MD, TXT, HTML · her dosya türüne göre otomatik sınıflanır</div>
+              <div className="mt-1 text-[13px] text-muted">PDF, DOCX, PPTX, XLSX, MD, TXT, HTML ve görseller (PNG, JPG, HEIC…) · görseller yapay zeka ile okunur</div>
             </div>
           </div>
           <div className="flex flex-col gap-2">

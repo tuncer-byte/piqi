@@ -160,9 +160,11 @@ struct AudioProcess {
     let pid: pid_t
     let bundleID: String
     let isRunningOutput: Bool
+    /// Süreç mikrofon (ses girişi) kullanıyor mu; toplantı algılamanın ana sinyali.
+    let isRunningInput: Bool
 
     var json: [String: Any] {
-        ["pid": pid, "bundleId": bundleID, "isRunningOutput": isRunningOutput]
+        ["pid": pid, "bundleId": bundleID, "isRunningOutput": isRunningOutput, "isRunningInput": isRunningInput]
     }
 }
 
@@ -184,8 +186,9 @@ enum AudioProcesses {
             guard let bundleID = try? CoreAudio.getString(id, kAudioProcessPropertyBundleID), !bundleID.isEmpty
             else { return nil }
             let pid = (try? CoreAudio.get(id, kAudioProcessPropertyPID, default: pid_t(-1))) ?? -1
-            let running = (try? CoreAudio.get(id, kAudioProcessPropertyIsRunningOutput, default: UInt32(0))) ?? 0
-            return AudioProcess(objectID: id, pid: pid, bundleID: bundleID, isRunningOutput: running != 0)
+            let output = (try? CoreAudio.get(id, kAudioProcessPropertyIsRunningOutput, default: UInt32(0))) ?? 0
+            let input = (try? CoreAudio.get(id, kAudioProcessPropertyIsRunningInput, default: UInt32(0))) ?? 0
+            return AudioProcess(objectID: id, pid: pid, bundleID: bundleID, isRunningOutput: output != 0, isRunningInput: input != 0)
         }
     }
 }

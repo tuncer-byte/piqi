@@ -1,4 +1,4 @@
-appId: com.architecht.piqi
+appId: io.github.tuncer-byte.piqi
 productName: Piqi
 directories:
   output: release

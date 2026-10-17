@@ -9,6 +9,8 @@ import { act, Caret, Chip, CONFIDENCE, Divider, PillButton, RoundButton, Section
 export function AnswerBody({ answer, expanded }: { answer: AnswerCard; expanded: boolean }): ReactNode {
   const confidence = CONFIDENCE[answer.confidence]
   const general = answer.confidence === 'general'
+  // Cevap zaten onaylı bir SSS'den geliyorsa yeniden eklenmez.
+  const fromFaq = answer.sources.some((s) => s.label === 'SSS')
 
   return (
     <div className="px-7 pb-[18px] pt-2.5">
@@ -59,9 +61,18 @@ export function AnswerBody({ answer, expanded }: { answer: AnswerCard; expanded:
               )}
             </div>
             <div className="mt-4 flex items-center justify-between">
-              <PillButton variant="lime" onClick={() => undefined} disabled title="Bilgi bankası (M2) ile gelecek">
-                SSS’ye ekle
-              </PillButton>
+              {fromFaq ? (
+                <span className="text-[12px] font-semibold text-[#8E9199]">Onaylı cevaptan</span>
+              ) : (
+                <PillButton
+                  variant="lime"
+                  onClick={() => act({ type: 'saveFaq' })}
+                  disabled={answer.streaming || answer.savedFaq}
+                  title="Bu soru tekrar gelince model çağrılmadan bu cevap gösterilir"
+                >
+                  {answer.savedFaq ? 'SSS’ye eklendi' : 'SSS’ye ekle'}
+                </PillButton>
+              )}
               <div className="flex items-center gap-1">
                 <PillButton onClick={() => act({ type: 'copy' })}>
                   Kopyala <span className="ml-1 font-mono text-[#7B7E86]">⌘⇧C</span>
@@ -86,9 +97,9 @@ export function AnswerBody({ answer, expanded }: { answer: AnswerCard; expanded:
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {general ? (
-              <PillButton onClick={() => undefined} disabled title="Doküman eksikleri (M4) ile gelecek">
-                Eksikler listesine ekle
-              </PillButton>
+              <span className="text-[12px] font-semibold text-[#8E9199]" title="Ana pencere → Doküman eksikleri">
+                Eksiklere eklendi
+              </span>
             ) : (
               (answer.detail || answer.sources.length > 0) && (
                 <PillButton label="Detayı aç" onClick={() => act({ type: 'toggleExpand' })}>

@@ -1,17 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { rm } from 'node:fs/promises'
+import { meetingAppFor } from '@shared/meetingApps'
 import type { Settings } from '@shared/types'
 import type { AudioService } from '../audio/AudioService'
 import type { EmaEngine } from './EmaEngine'
-
-/** Bu uygulamalar ses üretiyorsa kullanıcı toplantıdadır; "otomatik" modda Piqi sesli konuşmaz. */
-const MEETING_BUNDLES = [
-  'com.microsoft.teams',
-  'us.zoom.xos',
-  'Cisco-Systems.Spark',
-  'com.tinyspeck.slackmacgap',
-  'com.apple.FaceTime'
-]
 
 /** Akan metni cümle sınırlarından bölerek seslendirme kuyruğuna verir. */
 export interface SentenceSink {
@@ -58,7 +50,11 @@ export class VoiceOutput extends EventEmitter<{ speaking: [boolean] }> {
     if (mode === 'never') return false
     try {
       const processes = await this.audio.listProcesses()
-      return !processes.some((p) => p.isRunningOutput && MEETING_BUNDLES.some((b) => p.bundleId.startsWith(b)))
+      // Bir toplantı uygulaması ses üretiyorsa kullanıcı toplantıdadır; "otomatik" modda Piqi sesli konuşmaz.
+      return !processes.some((p) => {
+        const app = meetingAppFor(p.bundleId)
+        return p.isRunningOutput && app != null && !app.browser
+      })
     } catch {
       return false
     }
