@@ -26,8 +26,8 @@ Download the latest **`Piqi-<version>-arm64.dmg`** from the [Releases page](http
    ```sh
    xattr -dr com.apple.quarantine /Applications/Piqi.app
    ```
-3. Piqi runs from the menu bar. Grant microphone, speech-recognition, and system-audio permission when asked.
-4. Open **Settings → Models and providers** and add a provider key or a local endpoint, then add a knowledge source.
+3. A short setup guide opens on first launch. It asks for microphone and meeting-audio permission, tests that both work, sets up your model provider (an API key or a local server such as Ollama, with a connection test), and lets you choose how meetings are detected. You only do this once; you can run it again from **Settings → General**.
+4. Add a knowledge source. Piqi then runs from the menu bar.
 
 Each release lists SHA-256 checksums in `SHA256SUMS.txt`; to check a download, run `shasum -a 256 Piqi-<version>-arm64.dmg` and compare. To build the app yourself, see [Build a macOS App](#build-a-macos-app).
 
@@ -97,9 +97,9 @@ Review **Settings → Privacy and compliance**. Choose whether cloud models are 
   <img src="docs/screenshots/privacy.png" alt="Privacy and compliance settings with data policy switches and a table of where each kind of data goes" width="820" />
 </p>
 
-### 4. Grant permissions and join a call
+### 4. Join a call
 
-Grant the macOS permissions needed for the capture options you enable, and configure microphone and system-audio capture in **Settings → Audio**.
+Permissions are granted once in the setup guide. If something later stops Piqi from hearing you or the meeting, such as a revoked permission or a missing model key, a notice at the top of the main window explains what is wrong and offers a one-click fix. Microphone and system-audio capture options are in **Settings → Audio**.
 
 Piqi detects calls automatically. When Microsoft Teams, Zoom, Webex, Slack, FaceTime, or a browser (for example, Google Meet) starts using the microphone, Piqi treats it as a call. Choose what happens in **Settings → Audio → Detect meetings automatically** (*Toplantıyı otomatik algıla*):
 
@@ -109,7 +109,7 @@ Piqi detects calls automatically. When Microsoft Teams, Zoom, Webex, Slack, Face
 | Automatic | Listening starts on its own. For browsers, Piqi still asks, because a browser can use the microphone for other things. |
 | Off | Nothing happens; start listening yourself. |
 
-When listening was started by detection, it stops by itself about 20 seconds after the app releases the microphone. If system audio is set to all apps, a detected call captures only that app's audio, so music and notifications stay out of the transcript. Detection reads macOS audio process state and does not need screen-recording permission or window titles.
+When listening was started by detection, it stops by itself about 20 seconds after the app releases the microphone. Detection reads macOS audio process state and does not need screen-recording permission or window titles.
 
 You can always start or stop listening from the app, the menu bar, or **⌘⇧L**. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
 
@@ -135,7 +135,7 @@ The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are l
 ## Privacy and Data Handling
 
 - Raw captured audio is processed as a live stream and is not saved as an audio recording.
-- Speech recognition runs on the Mac with the current Apple speech-recognition integration. Audio capture depends on the macOS permissions and sources you configure.
+- Speech recognition runs on the Mac. On macOS 26 and later Piqi uses Apple's SpeechAnalyzer, which transcribes long speech continuously, handles both channels at once, and does not need the speech-recognition permission; on earlier versions it uses the older on-device recognizer, which does.
 - When a cloud model is selected and allowed, the text required for that model request is sent to the selected provider. Piqi does not send every indexed source or transcript automatically; requests are made for assistant tasks.
 - The privacy settings can mask detected identifiers, including national or tax IDs, IBANs, card numbers, phone numbers, and email addresses, before text is sent to a cloud model. Review the effective policy before using sensitive material.
 - Images added as sources are sent to the selected model for analysis when the source is indexed. Personal-data masking applies to text only and cannot be applied to image content; use an on-premises model or keep cloud models disabled for sensitive images.
@@ -157,7 +157,7 @@ To run a release, you need macOS 14.4 or later on Apple silicon. To build from s
 
 - macOS 14.4 or later
 - Node.js 23 or later
-- Xcode with Swift 6.1 or later, for the native audio helper
+- Xcode 26 or later is recommended for the native audio helper (`npm run build:native` finds it automatically, even if another Xcode is the default). With an older Xcode (Swift 6.1+) the helper builds without macOS 26 speech recognition.
 - Rust toolchain for the local text-to-speech helper; its version is pinned in `native/piqi-tts/rust-toolchain.toml`
 
 The development command builds the native helpers before starting Electron. Some native dependencies or speech models may need to be downloaded during the first build or first use.
@@ -171,7 +171,7 @@ npm install
 npm run dev
 ```
 
-On first launch, macOS may request microphone, speech-recognition, and system-audio permissions. Grant only the permissions needed for the capture features you intend to use. Then configure a model provider and add at least one knowledge source before trying source-grounded answers.
+On first launch, the setup guide asks for microphone and meeting-audio permission and sets up a model provider. Then add at least one knowledge source before trying source-grounded answers.
 
 Useful development commands:
 
@@ -190,7 +190,7 @@ Packages are written to `release/` as a `.dmg` and a `.zip` for Apple silicon. T
 - **Without a certificate:** `npm run dist:local` signs the app ad hoc. It runs on the Mac that built it. Because ad hoc signing has no team identity, this build disables library validation (`build/entitlements.local.plist`). If you copy it to another Mac, macOS blocks the first launch; allow it in **System Settings → Privacy & Security → Open Anyway**, as described in [Download](#download).
 - **With a Developer ID certificate:** `npm run dist` signs with the certificate from your keychain or from `CSC_LINK` and `CSC_KEY_PASSWORD`, using `build/entitlements.mac.plist`. To notarize, add `-c.mac.notarize=true` and provide `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`, or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
 
-On first use, macOS asks for microphone, speech-recognition, and system-audio permission for Piqi. A packaged build has a different identity from the development build, so permissions are requested again.
+On first use, the setup guide asks for microphone and meeting-audio permission. A packaged build has a different identity from the development build, and every ad hoc signed build has a new identity, so permissions are requested again after rebuilding; a Developer ID signed build keeps them across updates.
 
 ## Project Layout
 
