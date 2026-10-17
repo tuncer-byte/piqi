@@ -9,20 +9,23 @@ Piqi helps solution architects, pre-sales engineers, and technical consultants f
 
 Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak to other participants on your behalf. You review its suggestions and respond in your own words.
 
-> **Project status:** Piqi is under active development. The current app supports live transcription, source management, and in-meeting assistance. Persistent meeting history, automatic summaries, and packaged distribution are not complete yet.
+> **Project status:** Piqi is under active development. The current app supports live transcription, source management, automatic answers to the other side's questions, and an approved-answer workflow. Persistent meeting history, automatic summaries, and signed packaged distribution are not complete yet.
 
 <p align="center">
-  <img src="docs/screenshots/island-meeting.gif" alt="Piqi Island detecting a question in a meeting, streaming a short source-linked answer, then expanding detail with a code excerpt and source list" width="760" />
+  <img src="docs/screenshots/island-ask.webp" alt="Typing a question into the ⌘⇧K ask panel and receiving a streamed answer from an approved Q&A entry, with its source" width="760" />
 </p>
-<p align="center"><sub>A question is detected in the meeting, a short answer streams in with its source, and the detail view adds supporting points, code, and the source list.</sub></p>
+<p align="center"><sub>⌘⇧K: a question answered from the local knowledge base, with its source.</sub></p>
 
 ## What Piqi Does
 
+- Detects Teams, Zoom, Webex, Slack, FaceTime, and browser calls, and starts listening when you join (or asks first).
 - Captures microphone and supported meeting-app audio as separate channels.
 - Shows a live transcript so you can follow what Piqi is hearing.
+- Detects product questions from the other side of the meeting and, when your sources cover them, prepares a source-linked answer in the Island.
 - Lets you invoke Piqi by voice or open a written or spoken ask panel.
 - Searches indexed product documents, code, web pages, and connected knowledge sources.
 - Presents concise answers with source references and expandable detail where available.
+- Collects questions it could not answer from your sources, so you can write an approved answer once and have it reused instantly.
 - Lets you configure one product profile with its name, sector, Piqi character, instructions, and recognition glossary.
 - Provides controls for model providers, cloud access, personal-data masking, and audit logging.
 
@@ -33,11 +36,14 @@ Open **Sources**, select **Add source**, and choose a source type. You can add:
 | Source type | What you can add |
 |---|---|
 | Documents | PDF, DOCX, PPTX, XLSX, Markdown, TXT, or HTML files and folders |
+| Images | PNG, JPG, HEIC, WebP, GIF, TIFF, or BMP: screenshots, architecture diagrams, charts, photographed tables, scanned pages |
 | Code repositories | A local folder or Git URL; review detected folders and choose what to include |
 | Web | A public URL, optionally following a sitemap within a page limit |
 | Confluence | A Cloud or Data Center / Server space |
 | Notion | Pages accessible to a Notion integration |
 | Approved Q&A | Curated question-and-answer pairs for stable product facts |
+
+Images are read by the selected model: Piqi downsizes each image, then the model writes out its title, a short summary, all visible text (tables as Markdown), and the concrete details needed to answer questions, such as numbers, components and their connections, or chart values. That text is indexed like any other document, so answers can cite the image. An image is analyzed once and again only if the file changes. The file preview shows which model will be used before anything is sent.
 
 For code repositories, Piqi scans the folder tree, observes `.gitignore` by default, and lets you choose folders and categories before indexing.
 
@@ -75,18 +81,34 @@ Review **Settings → Privacy and compliance**. Choose whether cloud models are 
   <img src="docs/screenshots/privacy.png" alt="Privacy and compliance settings with data policy switches and a table of where each kind of data goes" width="820" />
 </p>
 
-### 4. Grant permissions and start listening
+### 4. Grant permissions and join a call
 
-Grant the macOS permissions needed for the capture options you enable, and configure microphone and system-audio capture in **Settings → Audio**. Start listening from the app or menu bar. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
+Grant the macOS permissions needed for the capture options you enable, and configure microphone and system-audio capture in **Settings → Audio**.
 
-### 5. Ask Piqi
+Piqi detects calls automatically. When Microsoft Teams, Zoom, Webex, Slack, FaceTime, or a browser (for example, Google Meet) starts using the microphone, Piqi treats it as a call. Choose what happens in **Settings → Audio → Detect meetings automatically** (*Toplantıyı otomatik algıla*):
 
-When a question comes up, Piqi shows the answer and its sources in the Island at the top of the screen. You can also say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to type a question. Questions that match an approved answer are answered instantly from your knowledge base, without a model call.
+| Mode | Behavior |
+|---|---|
+| Ask (default) | The Island shows “Zoom call detected” with **Start listening** and **Not now**. |
+| Automatic | Listening starts on its own. For browsers, Piqi still asks, because a browser can use the microphone for other things. |
+| Off | Nothing happens; start listening yourself. |
 
-<p align="center">
-  <img src="docs/screenshots/island-ask.gif" alt="Typing a question into the ⌘⇧K ask panel and receiving an instant answer from an approved Q&A entry" width="760" />
-</p>
-<p align="center"><sub>⌘⇧K: a typed question answered from an approved Q&amp;A entry.</sub></p>
+When listening was started by detection, it stops by itself about 20 seconds after the app releases the microphone. If system audio is set to all apps, a detected call captures only that app's audio, so music and notifications stay out of the transcript. Detection reads macOS audio process state and does not need screen-recording permission or window titles.
+
+You can always start or stop listening from the app, the menu bar, or **⌘⇧L**. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
+
+### 5. Get answers
+
+**Questions from the other side.** With **Settings → Speech recognition → Answer the other side's questions automatically** (*Karşı tarafın sorularını otomatik cevapla*) enabled and the other side's transcript turned on, Piqi checks each finished sentence from the meeting audio. Small talk and meeting logistics such as “Can you hear me?” are ignored. For a product question, Piqi searches your sources locally; if a source covers the question well, the question and a short, source-linked answer appear in the Island. If nothing in your sources covers it, Piqi does not call a model and records the question under **Document gaps** (*Doküman eksikleri*) instead.
+
+Press **⌘⇧Space** to answer the other side's most recent question right away, for example when automatic answers are off or a question was skipped.
+
+**Your own questions.** Say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to type a question, as shown at the top of this page.
+
+### 6. Improve answers over time
+
+- **Add to approved answers.** When an answer is right, select **Add to FAQ** (*SSS’ye ekle*) in the Island. The next time the same question comes up, Piqi shows that approved answer immediately, without a model call.
+- **Document gaps.** Questions that had no matching source, were answered without a source, or received negative feedback are listed on the **Document gaps** page, with how often each was asked. Write an approved answer there to add it to your FAQ; the question then leaves the list.
 
 The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are listed in **Settings → Shortcuts**. Shortcut registration may fail if another application already uses the same combination.
 
@@ -96,9 +118,11 @@ The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are l
 - Speech recognition runs on the Mac with the current Apple speech-recognition integration. Audio capture depends on the macOS permissions and sources you configure.
 - When a cloud model is selected and allowed, the text required for that model request is sent to the selected provider. Piqi does not send every indexed source or transcript automatically; requests are made for assistant tasks.
 - The privacy settings can mask detected identifiers, including national or tax IDs, IBANs, card numbers, phone numbers, and email addresses, before text is sent to a cloud model. Review the effective policy before using sensitive material.
+- Images added as sources are sent to the selected model for analysis when the source is indexed. Personal-data masking applies to text only and cannot be applied to image content; use an on-premises model or keep cloud models disabled for sensitive images.
 - Provider API keys and remote-source credentials are stored in the macOS Keychain rather than in source records.
 - Optional audit records contain request metadata, not question or answer text.
 - Speaker separation does not retain voiceprints; speaker labels are temporary for the listening session.
+- The meeting transcript is kept in memory only (the last 15 minutes) and is not written to disk. Document gaps store only the question text, who asked, and counts, in the app's local data folder.
 
 These controls do not replace your organization’s privacy, security, or data-handling review. Confirm that you are authorized to connect a source and use the selected model provider with its contents.
 
@@ -150,7 +174,7 @@ npm run dist      # Package a macOS app
 
 ## About the Screenshots
 
-Screenshots and recordings come from a demo profile indexed with this repository's own documentation and code. The meeting recording uses the app's built-in Island demo content; the ⌘⇧K recording is a real answer from an approved Q&A entry in that profile.
+Screenshots and recordings were taken from the running app with a profile indexed with this repository's own documentation and code. The ⌘⇧K recording is a real answer from an approved Q&A entry in that profile.
 
 ## Contributing
 
