@@ -11,6 +11,24 @@ Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak 
 
 > **Project status:** Piqi is under active development. The current app supports live transcription, source management, and in-meeting assistance. Persistent meeting history, automatic summaries, and packaged distribution are not complete yet.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/island-answer.png" alt="Piqi Island showing a short, source-linked answer to a question asked in a meeting" width="680" />
+</p>
+<p align="center"><em>The Island: a short answer with its source, shown at the top of the screen while the meeting continues.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/island-detail.png" alt="Expanded Island answer with detail bullets and a code excerpt" width="680" />
+</p>
+<p align="center"><em>Expanded detail with supporting points and the relevant code excerpt.</em></p>
+
+| Sources | Models and providers | Privacy and compliance |
+|---|---|---|
+| <img src="docs/screenshots/sources.png" alt="Sources screen listing document, code, and approved Q&A sources with index statistics" /> | <img src="docs/screenshots/models.png" alt="Models and providers settings with the active model and thinking depth" /> | <img src="docs/screenshots/privacy.png" alt="Privacy and compliance settings with data policy toggles and a data-flow table" /> |
+
+Screenshots use a demo profile indexed with this repository's own documentation and code. The Island answer is the app's built-in demo content.
+
 ## What Piqi Does
 
 - Captures microphone and supported meeting-app audio as separate channels.
