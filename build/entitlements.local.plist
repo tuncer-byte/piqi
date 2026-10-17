@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Yalnızca sertifikasız yerel paket (npm run dist:local) içindir. Ad-hoc imzada takım kimliği olmadığından
+  hardened runtime, Electron'un kendi framework'lerini yüklemeyi reddeder; kütüphane doğrulaması kapatılır.
+  Developer ID ile imzalanan dağıtım sürümü entitlements.mac.plist'i kullanır ve bu izne ihtiyaç duymaz.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

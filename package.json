@@ -11,6 +11,7 @@
     "build": "npm run build:native && npm run build:tts && npm run icons && electron-vite build",
     "build:native": "cd native/piqi-audio && swift build -c release && codesign --force --sign - --identifier io.github.tuncer-byte.piqi.audio .build/release/piqi-audio",
     "dist": "npm run build && electron-builder --mac",
+    "dist:local": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac -c.mac.identity=- -c.mac.entitlements=build/entitlements.local.plist -c.mac.entitlementsInherit=build/entitlements.local.plist",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run",
     "postinstall": "node scripts/patch-electron-dev-plist.mjs",
@@ -19,16 +20,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
-    "@fontsource-variable/dm-sans": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
     "@google/genai": "^2.30.0",
     "ignore": "^7.0.12",
     "officeparser": "^8.1.1",
     "openai": "^7.34.0",
-    "zod": "^4.6.7",
-    "zustand": "^5.0.15"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
@@ -43,6 +43,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "zustand": "^5.0.15"
   }
 }

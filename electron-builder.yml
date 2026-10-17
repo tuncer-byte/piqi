@@ -19,6 +19,15 @@ mac:
   category: public.app-category.productivity
   minimumSystemVersion: "14.4"
   hardenedRuntime: true
+  # Uygulama ve paketteki tüm yardımcılar (piqi-audio dahil) aynı izinlerle imzalanır.
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Developer ID sertifikası anahtar zincirinde ya da CSC_LINK ile verilirse onunla imzalanır;
+  # sertifikasız yerel paket için: npm run dist:local (ad-hoc imza).
+  notarize: false
+  # FluidAudio kaynak paketinde yalnızca model verisi var (Mach-O yok); imzalanmaz, uygulama mührü kapsar.
+  signIgnore:
+    - FluidAudio_FluidAudio\.bundle
   extendInfo:
     LSUIElement: true
     NSMicrophoneUsageDescription: Piqi, konuşmanızı karşı tarafın sorularından ayırmak için mikrofonu dinler.

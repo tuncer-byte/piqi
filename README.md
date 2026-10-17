@@ -156,8 +156,18 @@ Useful development commands:
 npm test          # Run the test suite
 npm run typecheck # Type-check the Electron and renderer projects
 npm run build     # Build native helpers and the Electron app
-npm run dist      # Package a macOS app
+npm run dist:local # Package a macOS app for this Mac (no certificate needed)
+npm run dist      # Package a signed macOS app with a Developer ID certificate
 ```
+
+## Build a macOS App
+
+Packages are written to `release/` as a `.dmg` and a `.zip` for Apple silicon. The app and its audio and speech helpers are signed with the hardened runtime and the entitlements in `build/`, so microphone capture keeps working in the packaged app.
+
+- **Without a certificate:** `npm run dist:local` signs the app ad hoc. It runs on the Mac that built it. Because ad hoc signing has no team identity, this build disables library validation (`build/entitlements.local.plist`). If you copy it to another Mac, macOS blocks the first launch; open it with Control-click → **Open**.
+- **With a Developer ID certificate:** `npm run dist` signs with the certificate from your keychain or from `CSC_LINK` and `CSC_KEY_PASSWORD`, using `build/entitlements.mac.plist`. To notarize, add `-c.mac.notarize=true` and provide `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`, or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
+
+On first use, macOS asks for microphone, speech-recognition, and system-audio permission for Piqi. A packaged build has a different identity from the development build, so permissions are requested again.
 
 ## Project Layout
 
