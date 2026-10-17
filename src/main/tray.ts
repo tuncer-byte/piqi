@@ -4,10 +4,12 @@ import { hex, rasterizeMark, type RGBA } from '@shared/markRaster'
 
 export interface TrayHandlers {
   isListening(): boolean
+  /** Algılanan görüşmenin uygulaması ("Zoom"); yoksa null. */
+  detectedMeeting(): string | null
   productName(): string
   toggleListening(): void
   openAsk(): void
-  showDemo(): void
+  answerNow(): void
   toggleIsland(): void
   openMain(): void
   quit(): void
@@ -25,10 +27,12 @@ export class PiqiTray {
 
   refresh(): void {
     const listening = this.handlers.isListening()
+    const detected = this.handlers.detectedMeeting()
     this.tray.setImage(markIcon(listening))
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: `Ürün: ${this.handlers.productName()}`, enabled: false },
+        ...(detected ? [{ label: `${detected} görüşmesi algılandı`, enabled: false }] : []),
         { type: 'separator' },
         {
           label: listening ? 'Dinlemeyi durdur' : 'Dinlemeye başla',
@@ -37,7 +41,7 @@ export class PiqiTray {
         },
         { label: 'Piqi’ye sor…', accelerator: 'CommandOrControl+Shift+K', click: () => this.handlers.openAsk() },
         { type: 'separator' },
-        { label: 'Demo cevap göster', accelerator: 'CommandOrControl+Shift+Space', click: () => this.handlers.showDemo() },
+        { label: 'Son soruyu şimdi cevapla', accelerator: 'CommandOrControl+Shift+Space', click: () => this.handlers.answerNow() },
         { label: 'Island’ı gizle/göster', accelerator: 'CommandOrControl+Shift+H', click: () => this.handlers.toggleIsland() },
         { type: 'separator' },
         { label: 'Piqi’yi aç…', click: () => this.handlers.openMain() },

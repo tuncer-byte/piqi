@@ -3,7 +3,7 @@ import Foundation
 // macOS gizlilik izinlerini (TCC) "sorumlu süreç" adına ister. Geliştirme sırasında Electron bir terminalden
 // (VS Code, iTerm…) başlatıldığı için sorumlu süreç terminal olur; onun Info.plist'inde konuşma tanıma açıklaması
 // yoksa TCC yardımcıyı sonlandırır. PIQI_DISCLAIM=1 ile yardımcı kendini sorumluluğu reddederek yeniden çalıştırır;
-// böylece izinler gömülü Info.plist'iyle (com.architecht.piqi.audio) istenir. Paketli uygulamada gerekmez:
+// böylece izinler gömülü Info.plist'iyle (io.github.tuncer-byte.piqi.audio) istenir. Paketli uygulamada gerekmez:
 // sorumlu süreç Piqi.app'tir ve izin metinleri onun Info.plist'indedir.
 
 @_silgen_name("responsibility_spawnattrs_setdisclaim")

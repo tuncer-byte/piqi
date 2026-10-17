@@ -207,3 +207,17 @@ export interface Tactic {
   state: 'active' | 'available' | 'idea'
   action?: 'enableCards' | 'excludeTests' | 'prebuildFaq' | 'onprem'
 }
+
+/** Doküman eksiği: kaynakta karşılığı bulunamayan ya da olumsuz geri bildirim alan soru. */
+export interface KnowledgeGap {
+  id: string
+  question: string
+  /** Soruyu soran ("Karşı taraf", "Elif", "Sen"). */
+  askedBy: string
+  /** no-source: kaynakta eşleşme yok · general: cevap kaynaksız üretildi · negative: olumsuz geri bildirim aldı. */
+  reason: 'no-source' | 'general' | 'negative'
+  /** Aynı sorunun kaç kez geldiği. */
+  count: number
+  firstAt: number
+  lastAt: number
+}

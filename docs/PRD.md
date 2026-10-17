@@ -174,7 +174,7 @@ Workspace kavramı arayüzde **ürün** olarak geçer. Her ürünün kendine ait
 | L-4 | Qwen3 gibi modellerin `<think>` bölümleri akış sırasında gizlenir | P1 |
 | L-5 | Her sağlayıcının anahtarı ayrı ayrı Keychain'de şifreli saklanır. Ortam değişkeniyle de verilebilir | P0 |
 
-### 5.11 Bankacılık uyumu (Kuveyt Türk / Architecht)
+### 5.11 Bankacılık uyumu
 | ID | Gereksinim | Öncelik |
 |---|---|---|
 | B-1 | **Veri politikası:** bulut modellerine izin, kişisel veri maskeleme, denetim kaydı. Varsayılan: bulut açık, maskeleme açık, denetim açık | P0 |
@@ -483,10 +483,8 @@ Yeni bir sağlayıcı veya konektör eklemek, çekirdeğe dokunmadan bir adaptö
 
 ## 14. Açık Sorular
 1. Varsayılan LLM sağlayıcısı ve modeli ne olacak? (Öneri: Claude — kısa cevap için hızlı model, detay için güçlü model.)
-2. Bulut STT için tercih edilen sağlayıcı ve kurumsal sözleşme durumu?
-3. Confluence Cloud mu, Data Center mı kullanılıyor?
-4. Ürün adı "Piqi" kesin mi? (Bundle ID: `com.architecht.piqi`?)
-5. Dağıtım: yalnızca dahili mi, ileride harici müşterilere de mi? (İmzalama ve lisanslama kararlarını etkiler.)
+2. Bulut STT seçeneği eklenecekse hangi sağlayıcı varsayılan olmalı?
+3. İmzalı dağıtım ve otomatik güncelleme hangi kanaldan yapılacak (GitHub Releases, Homebrew cask)?
 
 ---
 

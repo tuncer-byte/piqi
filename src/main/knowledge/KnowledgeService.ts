@@ -19,15 +19,16 @@ import type {
 import { DOC_CATEGORY_LABEL } from '@shared/knowledge'
 import type { Settings } from '@shared/types'
 import { presetById } from '@shared/providers'
-import type { LlmService } from '../llm/LlmService'
+import { LlmError, type LlmService } from '../llm/LlmService'
 import type { SecretStore } from '../SecretStore'
 import { buildCards, cardEstimate, cardPreview, triage } from './ai'
 import { categorizeDocument, tagsFor } from './categorize'
 import { chunkCode, chunkDocument, type Chunk } from './chunker'
 import { confluencePages, crawlWeb, gitBranches, gitSync, notionPages, type RemotePage } from './connectors'
-import { extract, isSupportedDocument } from './extract'
+import { extract, isSupportedDocument, sizeLabel } from './extract'
 import { KnowledgeDB } from './KnowledgeDB'
 import { folderOf, scanCode, totalsFor, walk, type ScannedFile } from './scanner'
+import { extractImage, isImage, MAX_IMAGE_BYTES } from './vision'
 
 export interface AddSourceRequest {
   kind: SourceKind
@@ -140,6 +141,10 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
       const name = basename(path)
       const ext = extname(path).slice(1).toLowerCase()
       const size = (await stat(path).catch(() => null))?.size ?? 0
+      if (isImage(path)) {
+        out.push({ path, name, ext, sizeBytes: size, pages: null, pageLabel: `görsel · ${sizeLabel(size)}`, category: 'genel', tags: [], ...this.imagePreview(), chunks: 1 })
+        continue
+      }
       try {
         const extracted = await extract(path)
         const sample = extracted.units.map((u) => u.text).join('\n').slice(0, 6000)
@@ -382,7 +387,7 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
       {
         id: 'onprem',
         title: 'Kurum içi model',
-        detail: 'Bankanın sunucusundaki Qwen (vLLM/Ollama) ile soru başına bulut maliyeti sıfır, veri ağ dışına çıkmaz.',
+        detail: 'Kurumun sunucusundaki Qwen (vLLM/Ollama) ile soru başına bulut maliyeti sıfır, veri ağ dışına çıkmaz.',
         impact: 'maliyet',
         state: cloud ? 'available' : 'active',
         action: cloud ? 'onprem' : undefined
@@ -553,6 +558,16 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
     }
   }
 
+  /** Görsel önizlemesi: model çağrılmaz; indekslemede hangi modele gideceği ve politika durumu bildirilir. */
+  private imagePreview(): Pick<FileScan, 'status' | 'message'> {
+    const target = this.llm.target()
+    if (!target) return { status: 'error', message: 'Görsel analizi için model seçilmemiş' }
+    if (target.blocked) return { status: 'error', message: target.blocked }
+    return target.location === 'cloud'
+      ? { status: 'warn', message: `${target.name} ile analiz edilecek; görsel içeriği maskelenemez` }
+      : { status: 'ok', message: `${target.name} ile analiz edilecek` }
+  }
+
   private async indexFiles(source: SourceRecord, paths: string[], signal: AbortSignal): Promise<void> {
     const config = source.config.kind === 'files' ? source.config.files : null
     const files = await expandDocuments(paths)
@@ -560,6 +575,8 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
     const seen = new Set<string>()
     const warnings: string[] = []
     let pages = 0
+    // Anahtar, politika ya da bağlantı hatası: kalan görseller için boşuna model çağırma.
+    let visionBlocked: string | null = null
     for (let i = 0; i < files.length; i++) {
       if (signal.aborted) return
       const path = files[i]!
@@ -571,7 +588,13 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
       const hash = sha1(`${info.size}:${info.mtimeMs}`)
       if (existing.get(path)?.hash === hash) continue
       try {
-        const extracted = await extract(path)
+        if (isImage(path) && visionBlocked) {
+          warnings.push(`${name}: analiz edilmedi (${visionBlocked})`)
+          continue
+        }
+        this.patch(source, { stage: `${name} ${isImage(path) ? 'yapay zeka ile okunuyor' : 'okunuyor'} · ${i + 1}/${files.length}` })
+        const image = isImage(path) ? await extractImage(this.llm, path, sizeLabel(info.size), signal) : null
+        const extracted = image ?? (await extract(path))
         pages += extracted.pages ?? 0
         if (extracted.warnings.length) warnings.push(`${name}: ${extracted.warnings[0]}`)
         const sample = extracted.units.map((u) => u.text).join('\n').slice(0, 6000)
@@ -585,10 +608,13 @@ export class KnowledgeService extends EventEmitter<{ changed: [] }> {
           hash,
           chunks: chunkDocument(name, extracted.units),
           labelFor: (c: Chunk) => (c.pageLabel ? `${name} · ${c.pageLabel}` : name),
-          keywords: `${DOC_CATEGORY_LABEL[category]} ${tags.join(' ')}`
+          keywords: `${DOC_CATEGORY_LABEL[category]} ${tags.join(' ')} ${image?.keywords ?? ''}`.trim()
         })
       } catch (error) {
-        warnings.push(`${name}: okunamadı (${(error as Error).message.slice(0, 60)})`)
+        if (signal.aborted) return
+        const message = (error as Error).message
+        if (isImage(path) && error instanceof LlmError && ['no_key', 'policy', 'auth', 'network'].includes(error.code)) visionBlocked = message
+        warnings.push(`${name}: okunamadı (${message.slice(0, 90)})`)
       }
       await new Promise((r) => setImmediate(r))
     }
@@ -681,7 +707,7 @@ async function expandDocuments(paths: string[]): Promise<string[]> {
     if (info.isDirectory()) {
       if (depth > 6 || /(^|\/)(\.|node_modules|dist|build)/.test(basename(path))) return
       for (const entry of await readdir(path).catch(() => [])) await visit(join(path, entry), depth + 1)
-    } else if (isSupportedDocument(path) && info.size <= 80 * 1024 * 1024) out.push(path)
+    } else if (isImage(path) ? info.size <= MAX_IMAGE_BYTES : isSupportedDocument(path) && info.size <= 80 * 1024 * 1024) out.push(path)
   }
   for (const p of paths) await visit(p, 0)
   return [...new Set(out)]

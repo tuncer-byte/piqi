@@ -3,7 +3,7 @@ import type { AudioProcessInfo, PermissionStatus, VoiceInfo, VoiceReplies } from
 import { useCaptureStatus, useLevels, useTtsStatus } from '../../shared/hooks'
 import { Mic, Speaker } from '../../shared/icons'
 import type { PageProps } from '../App'
-import { MEETING_APPS } from '../meetingApps'
+import { MEETING_APPS } from '@shared/meetingApps'
 import { Badge, Button, Card, Kbd, Label, PageHeader, Segmented, SettingRow, Switch } from '../ui'
 
 // ── Genel ─────────────────────────────────────────────────────────────────
@@ -193,6 +193,25 @@ export function AudioPage({ settings, update }: PageProps): ReactNode {
         <Meter icon={<Mic size={16} />} label="Ben" sub="Mikrofon" value={levels.me} enabled={status?.mic ?? false} />
       </Card>
       <Card className="flex flex-col gap-5 px-5 py-[18px]">
+        <SettingRow
+          title="Toplantıyı otomatik algıla"
+          description="Teams, Zoom, Webex, Slack, FaceTime veya tarayıcı bir görüşmede mikrofonu açtığında Piqi bunu fark eder. “Sor”: Island’da dinlemeye başlamak isteyip istemediğini sorar. “Otomatik”: dinlemeyi kendiliğinden başlatır (tarayıcılarda yine sorar). Görüşme bitince Piqi’nin başlattığı dinleme durur. Ekran kaydı izni gerekmez."
+        >
+          <Segmented
+            value={settings.meetingDetection}
+            options={[
+              { value: 'off', label: 'Kapalı' },
+              { value: 'ask', label: 'Sor' },
+              { value: 'auto', label: 'Otomatik' }
+            ]}
+            onChange={(meetingDetection) => update({ meetingDetection })}
+          />
+        </SettingRow>
+        {status?.detectedMeeting && (
+          <div className="text-[13px] font-semibold text-ok">{status.detectedMeeting} görüşmesi algılandı</div>
+        )}
+      </Card>
+      <Card className="flex flex-col gap-5 px-5 py-[18px]">
         <SettingRow title="Mikrofon" description="Kendi konuşman; “Selam Piqi” ve prova cevapları buradan duyulur. Karşı tarafın soruları bu kanalda aranmaz.">
           <Switch label="Mikrofon" checked={settings.capture.mic} onChange={(mic) => update({ capture: { ...settings.capture, mic } })} />
         </SettingRow>
@@ -246,11 +265,11 @@ function Meter(props: { icon: ReactNode; label: string; sub: string; value: numb
 function ProcessList(): ReactNode {
   const [items, setItems] = useState<AudioProcessInfo[] | null>(null)
   const refresh = (): void => void window.piqi.capture.listProcesses().then(setItems)
-  const active = items?.filter((p) => p.isRunningOutput) ?? []
+  const active = items?.filter((p) => p.isRunningOutput || p.isRunningInput) ?? []
   return (
     <Card className="flex flex-col gap-3 px-5 py-[18px]">
       <div className="flex items-center justify-between">
-        <Label>Şu an ses çalan uygulamalar</Label>
+        <Label>Ses ve mikrofon kullanan uygulamalar</Label>
         <Button size="sm" onClick={refresh}>
           {items ? 'Yenile' : 'Göster'}
         </Button>
@@ -262,10 +281,13 @@ function ProcessList(): ReactNode {
           </div>
           <ul className="selectable m-0 max-h-48 list-none overflow-y-auto p-0 font-mono text-[12px]">
             {[...items]
-              .sort((a, b) => Number(b.isRunningOutput) - Number(a.isRunningOutput))
+              .sort((a, b) => Number(b.isRunningInput) * 2 + Number(b.isRunningOutput) - (Number(a.isRunningInput) * 2 + Number(a.isRunningOutput)))
               .map((p) => (
-                <li key={p.pid} className={`py-0.5 ${p.isRunningOutput ? '' : 'text-muted'}`}>
-                  {p.isRunningOutput ? '●' : '○'} {p.bundleId} <span className="opacity-50">({p.pid})</span>
+                <li key={p.pid} className={`flex items-center gap-2 py-0.5 ${p.isRunningOutput || p.isRunningInput ? '' : 'text-muted'}`}>
+                  <span className="w-[86px] shrink-0 font-sans text-[11px] font-semibold">
+                    {[p.isRunningInput && 'mikrofon', p.isRunningOutput && 'ses'].filter(Boolean).join(' + ') || '-'}
+                  </span>
+                  {p.bundleId} <span className="opacity-50">({p.pid})</span>
                 </li>
               ))}
           </ul>
@@ -287,7 +309,7 @@ export function SpeechPage({ settings, update }: PageProps): ReactNode {
     <>
       <PageHeader title="Konuşma tanıma" subtitle="Konuşmalar Apple’ın cihaz üzerindeki tanımasıyla yazıya dökülür; ses Mac’inden çıkmaz." />
       <Card className="flex flex-col gap-5 px-5 py-[18px]">
-        <SettingRow title="Motor" description="Whisper (lokal) ve Deepgram (bulut) seçenekleri M1 ile eklenecek.">
+        <SettingRow title="Motor" description="Apple’ın cihaz üzerindeki konuşma tanıması; ses Mac’ten çıkmaz.">
           <Badge tone="ok">Apple · cihaz üzerinde</Badge>
         </SettingRow>
         <SettingRow title="İzin" description="macOS konuşma tanıma izni.">
@@ -324,6 +346,16 @@ export function SpeechPage({ settings, update }: PageProps): ReactNode {
           />
         </SettingRow>
         <SettingRow
+          title="Karşı tarafın sorularını otomatik cevapla"
+          description="Karşı taraf ürünle ilgili bir soru sorduğunda Piqi bilgi bankasında arar. Güçlü bir kaynak bulursa cevabı Island’da gösterir; bulamazsa model çağırmadan soruyu Doküman eksikleri’ne yazar. “Beni duyuyor musunuz?” gibi cümleler yok sayılır."
+        >
+          <Switch
+            label="Otomatik cevap"
+            checked={settings.speech.autoAnswer}
+            onChange={(autoAnswer) => update({ speech: { ...settings.speech, autoAnswer } })}
+          />
+        </SettingRow>
+        <SettingRow
           title="Kaç kişi konuşuyor? (konuşmacı ayrımı)"
           description="Karşı taraftaki farklı kişileri ayırt eder: Konuşmacı 1, 2, 3… Toplantıda isim verebilirsin. Cihaz üzerinde çalışır (FluidAudio); ses izi saklanmaz, numaralar toplantı bitince silinir. İlk açılışta ~45 MB model indirilir."
         >
@@ -348,7 +380,7 @@ export function SpeechPage({ settings, update }: PageProps): ReactNode {
 const SHORTCUTS = [
   ['⌘⇧L', 'Dinlemeyi başlat / durdur'],
   ['⌘⇧K', 'Piqi’ye sor (yazılı veya sesli)'],
-  ['⌘⇧Space', 'Şimdi cevapla (M3’e kadar demo cevap)'],
+  ['⌘⇧Space', 'Karşı tarafın son sorusunu şimdi cevapla'],
   ['⌘⇧E', 'Detayı aç / kapat'],
   ['⌘⇧C', 'Son cevabı kopyala'],
   ['⌘⇧H', 'Island’ı gizle / göster'],
@@ -378,9 +410,8 @@ export function AboutPage(): ReactNode {
     <>
       <PageHeader title="Hakkında ve güncellemeler" />
       <Card className="flex flex-col gap-3 px-5 py-[18px] text-[14px]">
-        <Row label="Piqi">0.2.0 · M1.5</Row>
+        <Row label="Piqi">{__APP_VERSION__}</Row>
         <Row label="Ses yardımcısı">{status?.helperVersion ? `piqi-audio ${status.helperVersion}` : 'dinleme başlayınca görünür'}</Row>
-        <Row label="Otomatik güncelleme">İmzalı dağıtımla (M5) gelecek</Row>
       </Card>
     </>
   )

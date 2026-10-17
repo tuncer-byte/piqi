@@ -11,22 +11,27 @@ import {
 } from 'electron'
 import { IPC, type NewSource, type SystemSettingsPane } from '@shared/ipc'
 import type { FolderScan, Tactic } from '@shared/knowledge'
+import { GapStore } from './knowledge/GapStore'
+import { IMAGE_EXT } from './knowledge/vision'
 import { KnowledgeDB } from './knowledge/KnowledgeDB'
 import { KnowledgeService } from './knowledge/KnowledgeService'
 import type {
   AskRequest,
   AudioChannel,
+  CaptureStatus,
   IslandAction,
   NotchGeometry,
   PermissionStatus,
   ProviderStatus,
   Settings
 } from '@shared/types'
+import type { MeetingApp } from '@shared/meetingApps'
 import { PARTICIPATION_GLOSSARY } from '@shared/products'
 import { PROVIDER_PRESETS } from '@shared/providers'
 import { Assistant } from './assistant/Assistant'
 import { AudioService, type ScreenInfo } from './audio/AudioService'
 import { IslandController } from './island/IslandController'
+import { MeetingDetector } from './meeting/MeetingDetector'
 import { AuditLog } from './llm/AuditLog'
 import { LlmService } from './llm/LlmService'
 import { PolicyService } from './PolicyService'
@@ -117,6 +122,13 @@ app.whenReady().then(async () => {
   knowledge.on('changed', () => {
     broadcast(IPC.knowledgeChanged, knowledge.overview())
   })
+  const gaps = new GapStore(join(userData, 'gaps.json'))
+  gaps.on('change', (list) => broadcast(IPC.gapsChanged, list))
+  /** Onaylı cevap kaydedilince aynı soru eksiklerden düşer. */
+  const saveFaq = (entry: { id?: string; question: string; answer: string }): void => {
+    knowledge.saveFaq(entry)
+    gaps.resolveByQuestion(entry.question)
+  }
 
   const screens = await audio.screens().catch((error) => {
     console.warn('[piqi] ekran geometrisi alınamadı:', error)
@@ -133,6 +145,10 @@ app.whenReady().then(async () => {
    * (mikrofon + sistem sesi + konuşmacı ayrımı). ⌘⇧L toplantı modunu açıp kapatır.
    */
   let meeting = false
+  /** Toplantı dinlemesini kim başlattı: dedektörün başlattığı dinleme görüşme bitince kendiliğinden durur. */
+  let meetingBy: 'user' | 'detector' = 'user'
+  /** Algılanan görüşmenin uygulaması; "tüm sistem sesi" modunda yalnızca onun sesi dinlenir. */
+  let meetingApp: MeetingApp | null = null
   let captureTransition: Promise<void> = Promise.resolve()
   const wakeAlways = (): boolean => settings.get().speech.wakeWord && settings.get().speech.alwaysListen
 
@@ -165,7 +181,12 @@ app.whenReady().then(async () => {
   const applyCapture = (): Promise<void> => {
     const transition = captureTransition.catch(() => undefined).then(async () => {
       const capture = settings.get().capture
-      const want = meeting ? capture : wakeAlways() ? { ...capture, mic: true, system: false } : null
+      // Algılanan görüşmede tüm sistem sesi yerine yalnızca o uygulamayı dinle (müzik, bildirim vb. karışmasın).
+      const forMeeting =
+        meetingApp && capture.system && capture.bundleIds.length === 0
+          ? { ...capture, bundleIds: [...meetingApp.bundleIds, ...(meetingApp.detect ?? [])] }
+          : capture
+      const want = meeting ? forMeeting : wakeAlways() ? { ...capture, mic: true, system: false } : null
       applySpeechConfig()
       const status = audio.getStatus()
       if (status.state === 'running' || status.state === 'starting') await audio.stop()
@@ -192,9 +213,11 @@ app.whenReady().then(async () => {
     if (!audio.getStatus().mic) throw new Error('Mikrofon açılamadı. İzinleri kontrol edin.')
   }
 
-  const setMeeting = async (on: boolean): Promise<void> => {
+  const setMeeting = async (on: boolean, by: 'user' | 'detector' = 'user'): Promise<void> => {
     if (meeting === on) return
     meeting = on
+    meetingBy = by
+    meetingApp = on ? detector.current : null
     // Her yeni toplantı: konuşmacı numaraları ve adları sıfırdan.
     if (on) people.reset()
     island.setListening(on)
@@ -203,7 +226,27 @@ app.whenReady().then(async () => {
   }
   const toggleListening = (): Promise<void> => setMeeting(!meeting)
 
-  const assistant = new Assistant({ llm, island, voice, transcripts, settings: getSettings, ensureMic, knowledge })
+  // ── Toplantı algılama: Teams/Zoom/… görüşmeye girince mikrofonu açar ──
+  const detector = new MeetingDetector(() => audio.listProcesses())
+  const captureStatus = (): CaptureStatus => ({ ...audio.getStatus(), meeting, detectedMeeting: detector.current?.name ?? null })
+  detector.on('start', (app) => {
+    tray.refresh()
+    broadcast(IPC.captureStatus, captureStatus())
+    if (meeting) return
+    // Tarayıcıda mikrofon her zaman toplantı değildir (dikte vb.); otomatik modda bile sorulur.
+    if (settings.get().meetingDetection === 'auto' && !app.browser) void setMeeting(true, 'detector')
+    else island.showMeetingPrompt(app.name)
+  })
+  detector.on('end', () => {
+    island.clearMeetingPrompt()
+    if (meeting && meetingBy === 'detector') void setMeeting(false)
+    tray.refresh()
+    broadcast(IPC.captureStatus, captureStatus())
+  })
+  const syncDetector = (): void => (settings.get().meetingDetection === 'off' ? detector.stop() : detector.start())
+
+  const assistant = new Assistant({ llm, island, voice, transcripts, settings: getSettings, ensureMic, knowledge, gaps })
+  island.on('saveFaq', (entry) => saveFaq(entry))
 
   const toggleIsland = (): void => {
     if (!islandWindow) return
@@ -213,10 +256,11 @@ app.whenReady().then(async () => {
 
   const tray = new PiqiTray({
     isListening: () => meeting,
+    detectedMeeting: () => detector.current?.name ?? null,
     productName: () => settings.get().product.name,
     toggleListening: () => void toggleListening(),
     openAsk: () => island.showAsk(),
-    showDemo: () => island.runDemo(),
+    answerNow: () => assistant.answerNow(),
     toggleIsland,
     openMain: () => openMain(),
     quit: () => app.quit()
@@ -229,7 +273,7 @@ app.whenReady().then(async () => {
       island.setListening(false)
     }
     tray.refresh()
-    broadcast(IPC.captureStatus, { ...status, meeting })
+    broadcast(IPC.captureStatus, { ...captureStatus(), ...status })
   })
   audio.on('levels', (levels) => broadcast(IPC.audioLevels, levels))
   audio.on('diarizer', (event) => people.setStatus(event.status, event.message))
@@ -245,6 +289,7 @@ app.whenReady().then(async () => {
     island.setTranscript(event)
     broadcast(IPC.transcript, event)
     if (event.channel === 'me') assistant.onMic(event)
+    else assistant.onTheirs(event, people.label(event.speaker))
   })
 
   // "Selam Piqi": uygulama açılır ve soruyu dinler. "Görüşürüz Piqi": pencereler kapanır, toplantı dinlemesi biter.
@@ -300,13 +345,24 @@ app.whenReady().then(async () => {
       case 'dismiss':
         assistant.cancel()
         break
+      case 'meetingStart':
+        void setMeeting(true, 'detector')
+        break
+      case 'feedback': {
+        // Olumsuz geri bildirim: cevap yetersiz; soru doküman eksiklerine düşer.
+        const answer = island.currentAnswer
+        if (action.value === 'down' && answer) gaps.add({ question: answer.question, askedBy: answer.askedBy, reason: 'negative' })
+        break
+      }
     }
   })
 
   const captureKey = (s: Settings): string =>
     JSON.stringify([s.capture, s.speech.wakeWord, s.speech.alwaysListen])
   let lastCapture = captureKey(settings.get())
+  syncDetector()
   settings.on('change', (next: Settings) => {
+    syncDetector()
     const key = captureKey(next)
     // Yakalama ya da uyandırma ayarı değişti: dinlemeyi yeni ayarlarla yeniden kur.
     if (key !== lastCapture) void applyCapture()
@@ -327,13 +383,13 @@ app.whenReady().then(async () => {
   // Renderer'daki "Dinlemeye başla/durdur" toplantı dinlemesidir.
   ipcMain.handle(IPC.captureStart, async () => {
     await setMeeting(true)
-    return { ...audio.getStatus(), meeting }
+    return captureStatus()
   })
   ipcMain.handle(IPC.captureStop, async () => {
     await setMeeting(false)
-    return { ...audio.getStatus(), meeting }
+    return captureStatus()
   })
-  ipcMain.handle(IPC.captureGetStatus, () => ({ ...audio.getStatus(), meeting }))
+  ipcMain.handle(IPC.captureGetStatus, () => captureStatus())
   ipcMain.handle(IPC.captureListProcesses, () => audio.listProcesses())
 
   ipcMain.handle(IPC.islandGetSnapshot, () => island.get())
@@ -343,7 +399,6 @@ app.whenReady().then(async () => {
     island.setHover(value)
   })
   ipcMain.on(IPC.islandAction, (_event, action: IslandAction) => island.handle(action))
-  ipcMain.on(IPC.islandDemo, () => island.runDemo())
 
   ipcMain.handle(IPC.settingsGet, () => settings.get())
   ipcMain.handle(IPC.settingsUpdate, (_event, patch: Partial<Settings>) => {
@@ -411,8 +466,13 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle(IPC.faqList, () => knowledge.faq())
   ipcMain.handle(IPC.faqSave, (_e, entry: { id?: string; question: string; answer: string }) => {
-    knowledge.saveFaq(entry)
+    saveFaq(entry)
     return knowledge.faq()
+  })
+  ipcMain.handle(IPC.gapsList, () => gaps.list())
+  ipcMain.handle(IPC.gapsRemove, (_e, id: string) => {
+    gaps.remove(id)
+    return gaps.list()
   })
   ipcMain.handle(IPC.faqDelete, (_e, id: string) => {
     knowledge.deleteFaq(id)
@@ -424,7 +484,12 @@ app.whenReady().then(async () => {
       properties: kind === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections'],
       filters:
         kind === 'files'
-          ? [{ name: 'Dokümanlar', extensions: ['pdf', 'docx', 'pptx', 'xlsx', 'md', 'txt', 'html', 'htm', 'csv', 'odt', 'rtf'] }]
+          ? [
+              {
+                name: 'Dokümanlar ve görseller',
+                extensions: ['pdf', 'docx', 'pptx', 'xlsx', 'md', 'txt', 'html', 'htm', 'csv', 'odt', 'rtf', ...IMAGE_EXT]
+              }
+            ]
           : undefined
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
@@ -442,8 +507,8 @@ app.whenReady().then(async () => {
         island.showAsk()
       }
     },
-    // Soru algılama (M3) gelene kadar demo cevap akışını gösterir.
-    'CommandOrControl+Shift+Space': () => island.runDemo(),
+    // Karşı tarafın son sorusunu hemen cevapla (otomatik cevap kapalı ya da atlanmış olsa da).
+    'CommandOrControl+Shift+Space': () => assistant.answerNow(),
     'CommandOrControl+Shift+E': () => island.handle({ type: 'toggleExpand' }),
     'CommandOrControl+Shift+C': () => island.handle({ type: 'copy' }),
     'CommandOrControl+Shift+H': toggleIsland
@@ -466,6 +531,9 @@ app.whenReady().then(async () => {
 
   app.on('before-quit', () => {
     globalShortcut.unregisterAll()
+    // Kapanışta "görüşme bitti" olayı yakalamayı yeniden kurmaya çalışmasın.
+    detector.removeAllListeners()
+    detector.stop()
     audio.dispose()
     ema.dispose()
     knowledge.dispose()

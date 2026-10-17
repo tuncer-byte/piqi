@@ -143,7 +143,7 @@ export function ConfluencePanel({ close }: PanelProps): ReactNode {
               placeholder={deployment === 'cloud' ? 'https://acme.atlassian.net' : 'https://wiki.kurum.local'}
             />
             <TextField label="Space anahtarı" mono value={space} onChange={setSpace} placeholder="GATEWAY" />
-            {deployment === 'cloud' && <TextField label="E-posta" value={email} onChange={setEmail} placeholder="ad.soyad@architecht.com" />}
+            {deployment === 'cloud' && <TextField label="E-posta" value={email} onChange={setEmail} placeholder="ad.soyad@sirket.com" />}
             <TextField
               label={deployment === 'cloud' ? 'API jetonu' : 'Kişisel erişim jetonu (PAT)'}
               type="password"

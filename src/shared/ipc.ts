@@ -1,6 +1,7 @@
 import type {
   CodeScan,
   FaqEntry,
+  KnowledgeGap,
   FileScan,
   FolderScan,
   KnowledgeHit,
@@ -44,7 +45,6 @@ export const IPC = {
   islandSnapshot: 'island:snapshot',
   islandSetHover: 'island:set-hover',
   islandAction: 'island:action',
-  islandDemo: 'island:demo',
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
@@ -96,6 +96,9 @@ export const IPC = {
   faqList: 'faq:list',
   faqSave: 'faq:save',
   faqDelete: 'faq:delete',
+  gapsList: 'gaps:list',
+  gapsChanged: 'gaps:changed',
+  gapsRemove: 'gaps:remove',
   dialogPick: 'dialog:pick',
 
   navigate: 'app:navigate'
@@ -135,7 +138,6 @@ export interface PiqiApi {
     /** İmleç Island üzerindeyken true: pencere tıklamaları yakalar ve otomatik kapanma durur. */
     setHover(hovering: boolean): void
     action(action: IslandAction): void
-    showDemo(): void
   }
   settings: {
     get(): Promise<Settings>
@@ -201,6 +203,10 @@ export interface PiqiApi {
     faq(): Promise<FaqEntry[]>
     saveFaq(entry: { id?: string; question: string; answer: string }): Promise<FaqEntry[]>
     deleteFaq(id: string): Promise<FaqEntry[]>
+    /** Doküman eksikleri: cevaplanamayan sorular (en sık sorulan önce). */
+    gaps(): Promise<KnowledgeGap[]>
+    removeGap(id: string): Promise<KnowledgeGap[]>
+    onGapsChange(cb: (gaps: KnowledgeGap[]) => void): Unsubscribe
     pick(kind: 'files' | 'folder'): Promise<string[]>
     /** Sürükle-bırak ile gelen dosyanın diskteki yolu. */
     pathForFile(file: File): string

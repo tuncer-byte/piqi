@@ -293,7 +293,7 @@ export function CodePanel({ close }: PanelProps): ReactNode {
               </div>
 
               <div className="flex flex-col rounded-[14px] border border-line bg-card px-4">
-                <ToggleRow title="Fonksiyon ve sınıf bazlı parçalama" sub="tree-sitter ile" checked={symbolChunking} onChange={setSymbolChunking} />
+                <ToggleRow title="Fonksiyon ve sınıf bazlı parçalama" sub="Parçalar fonksiyon ve sınıf sınırlarından bölünür" checked={symbolChunking} onChange={setSymbolChunking} />
                 <ToggleRow
                   title=".gitignore’a uy"
                   checked={gitignore}

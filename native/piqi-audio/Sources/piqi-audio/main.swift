@@ -24,7 +24,7 @@ import Foundation
 
 Responsibility.disclaimIfRequested()
 
-let version = "0.2.0"
+let version = "0.3.0"
 let mic = MicCapture()
 let systemTap = SystemAudioTap()
 let writer = FrameWriter.shared

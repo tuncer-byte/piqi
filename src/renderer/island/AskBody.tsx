@@ -190,6 +190,15 @@ export function ChatBody({ chat, levels, expanded }: { chat: ChatView; levels: A
                       <Stop size={12} /> Durdur
                     </PillButton>
                   )}
+                  {!chat.speaking && !chat.sources.some((s) => s.label === 'SSS') && (
+                    <PillButton
+                      onClick={() => act({ type: 'saveFaq' })}
+                      disabled={chat.savedFaq}
+                      title="Bu soru tekrar gelince model çağrılmadan bu cevap gösterilir"
+                    >
+                      {chat.savedFaq ? 'SSS’ye eklendi' : 'SSS’ye ekle'}
+                    </PillButton>
+                  )}
                   <PillButton onClick={() => act({ type: 'copy' })}>Kopyala</PillButton>
                   <PillButton onClick={() => act({ type: 'openAsk' })}>Yeni soru</PillButton>
                 </div>

@@ -21,8 +21,7 @@ const api: PiqiApi = {
     getSnapshot: () => ipcRenderer.invoke(IPC.islandGetSnapshot),
     onSnapshot: (cb) => subscribe(IPC.islandSnapshot, cb),
     setHover: (hovering) => ipcRenderer.send(IPC.islandSetHover, hovering),
-    action: (action) => ipcRenderer.send(IPC.islandAction, action),
-    showDemo: () => ipcRenderer.send(IPC.islandDemo)
+    action: (action) => ipcRenderer.send(IPC.islandAction, action)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
@@ -85,6 +84,9 @@ const api: PiqiApi = {
     faq: () => ipcRenderer.invoke(IPC.faqList),
     saveFaq: (entry) => ipcRenderer.invoke(IPC.faqSave, entry),
     deleteFaq: (id) => ipcRenderer.invoke(IPC.faqDelete, id),
+    gaps: () => ipcRenderer.invoke(IPC.gapsList),
+    removeGap: (id) => ipcRenderer.invoke(IPC.gapsRemove, id),
+    onGapsChange: (cb) => subscribe(IPC.gapsChanged, cb),
     pick: (kind) => ipcRenderer.invoke(IPC.dialogPick, kind),
     pathForFile: (file) => webUtils.getPathForFile(file)
   }

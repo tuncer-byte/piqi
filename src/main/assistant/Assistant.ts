@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events'
 import { createHash, randomUUID } from 'node:crypto'
-import type { KnowledgeHit } from '@shared/knowledge'
+import type { KnowledgeGap, KnowledgeHit } from '@shared/knowledge'
 import type { AskRequest, ChatView, Confidence, Settings, SourceRef, TranscriptEvent } from '@shared/types'
 import type { IslandController } from '../island/IslandController'
+import { gapKey } from '../knowledge/GapStore'
 import { queryConcepts } from '../knowledge/query'
 import { faqAnswer, sourcesBlock, type ContextBudget } from '../knowledge/snippet'
 import type { ChatMessage, LlmService } from '../llm/LlmService'
 import { assistantSystem } from '../llm/prompts'
+import { detectQuestion } from '../speech/questionDetect'
 import { detectSleep, detectWake } from '../speech/wakeWord'
 import type { TranscriptStore } from '../speech/TranscriptStore'
 import type { VoiceOutput } from '../speech/VoiceOutput'
@@ -21,6 +23,43 @@ const ANSWER_CACHE_LIMIT = 40
 const HISTORY_REPLY_CHARS = 600
 /** Bu kadar az kavram taşıyan soru önceki soruya bağlı sayılır ("peki Enterprise'da?"); arama onunla genişletilir. */
 const FOLLOW_UP_CONCEPTS = 3
+/** Hazır cevaplar (SSS, önbellek) bir anda belirmesin: kısa düşünme anı, ardından kelime kelime akış. */
+const REVEAL_THINK_MS = 180
+const REVEAL_TICK_MS = 30
+const REVEAL_MS_PER_WORD = 40
+const REVEAL_MIN_MS = 300
+const REVEAL_MAX_MS = 900
+/** Karşı tarafın sorusu ancak en iyi kaynak sorunun bu kadarını karşılıyorsa otomatik cevaplanır; yoksa eksiklere yazılır. */
+const AUTO_MIN_COVERAGE = 0.5
+/** Aynı soru bu süre içinde tekrar sorulursa yeniden cevaplanmaz (token ve dikkat dağınıklığı). */
+const AUTO_REPEAT_MS = 5 * 60_000
+/** "Şimdi cevapla": bu süredeki son soru, yoksa son cümle cevaplanır. */
+const ANSWER_NOW_QUESTION_MS = 2 * 60_000
+const ANSWER_NOW_SENTENCE_MS = 30_000
+
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Hazır metni kelime grupları halinde `onPartial`'a verir; toplam süre uzunlukla ölçeklenir ve sınırlıdır. */
+async function streamText(text: string, signal: AbortSignal, onPartial: (shown: string) => void): Promise<boolean> {
+  await wait(REVEAL_THINK_MS)
+  const words = text.split(/(?<=\s)/)
+  const duration = Math.min(REVEAL_MAX_MS, Math.max(REVEAL_MIN_MS, words.length * REVEAL_MS_PER_WORD))
+  const perTick = Math.max(1, Math.ceil(words.length / (duration / REVEAL_TICK_MS)))
+  for (let shown = perTick; shown < words.length; shown += perTick) {
+    if (signal.aborted) return false
+    onPartial(words.slice(0, shown).join(''))
+    await wait(REVEAL_TICK_MS)
+  }
+  return !signal.aborted
+}
+
+/** Cevabın ilk paragrafı (kısa cevap) ve kalanı (detay); Island'daki bölmeyle aynı kural. */
+function splitAnswer(text: string): { short: string; detail?: string } {
+  const clean = text.trim()
+  const at = clean.search(/\n\s*\n|\n\s*[-*•] |\n```/)
+  if (at === -1) return { short: clean }
+  return { short: clean.slice(0, at).trim(), detail: clean.slice(at).trim() }
+}
 
 /** Cevap türüne göre aranan parça sayısı, kaynak bloğu bütçesi ve toplantı bağlamı üst sınırı (karakter). */
 const MODES: Record<'spoken' | 'quick' | 'detailed', { hits: number; budget: ContextBudget; meetingChars: number }> = {
@@ -38,6 +77,8 @@ interface Deps {
   /** Mikrofon yakalama ve konuşma tanıma açık değilse açar. */
   ensureMic: () => Promise<void>
   knowledge: { search(question: string, limit?: number, extra?: string[]): KnowledgeHit[] }
+  /** Cevaplanamayan soruları "Doküman eksikleri"ne yazar. */
+  gaps: { add(gap: Pick<KnowledgeGap, 'question' | 'askedBy' | 'reason'>): void }
 }
 
 /** Metnin son `max` karakteri; satır ortasından başlamaz. */
@@ -86,6 +127,12 @@ export class Assistant extends EventEmitter<AssistantEvents> {
   private turns: ChatMessage[] = []
   private lastTurnAt = 0
   private answerCache = new Map<string, { createdAt: number; chat: ChatView }>()
+  /** Karşı tarafın sorusuna verilen otomatik cevap; kullanıcı kendi sorusunu sorunca kesilir. */
+  private autoAbort: AbortController | null = null
+  private recentAuto = new Map<string, number>()
+  /** Karşı tarafın son cümlesi ve son sorusu; ⌘⇧Space ("Şimdi cevapla") için. */
+  private lastTheirs: { text: string; askedBy: string; t: number } | null = null
+  private lastTheirQuestion: { text: string; askedBy: string; t: number } | null = null
 
   constructor(private readonly deps: Deps) {
     super()
@@ -187,6 +234,8 @@ export class Assistant extends EventEmitter<AssistantEvents> {
 
   private async answer(question: string, options: AnswerOptions): Promise<void> {
     this.cancel()
+    // Kullanıcının kendi sorusu önceliklidir: karşı tarafa hazırlanan otomatik cevap kesilir.
+    this.autoAbort?.abort()
     const abort = new AbortController()
     this.abort = abort
     const { llm, transcripts, voice } = this.deps
@@ -218,14 +267,8 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       .digest('hex')
     const cached = this.answerCache.get(cacheKey)
     if (cached && Date.now() - cached.createdAt < ANSWER_CACHE_TTL_MS) {
-      const cachedChat = { ...cached.chat, id: randomUUID(), speaking: false }
-      this.setChat(cachedChat)
       this.lastTurnAt = Date.now()
-      if (spoken) {
-        const sink = voice.sentences()
-        sink.push(cachedChat.reply)
-        await sink.end()
-      }
+      await this.reveal({ ...cached.chat, id: randomUUID(), speaking: false }, abort.signal, spoken)
       return
     }
     if (cached) this.answerCache.delete(cacheKey)
@@ -233,6 +276,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     // Onaylı SSS birebir karşılıyorsa model çağrılmaz: anında ve token harcamadan.
     const approved = options.detailed ? null : faqAnswer(question, hits[0])
     if (approved) {
+      this.remember(question, approved)
       const chat: ChatView = {
         id: randomUUID(),
         phase: 'done',
@@ -243,13 +287,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
         sources: [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }],
         confidence: 'grounded'
       }
-      this.setChat(chat)
-      this.remember(question, approved)
-      if (spoken) {
-        const sink = voice.sentences()
-        sink.push(approved)
-        await sink.end()
-      }
+      await this.reveal(chat, abort.signal, spoken)
       return
     }
 
@@ -294,6 +332,9 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       this.remember(question, stripCitations(reply))
       chat = { ...chat, phase: 'done', reply: stripCitations(reply), ...citations(reply, sources.used) }
+      if (chat.sources.length === 0 && detectQuestion(question)) {
+        this.deps.gaps.add({ question, askedBy: 'Sen', reason: hits.length ? 'general' : 'no-source' })
+      }
       this.setChat(chat)
       if (this.answerCache.size >= ANSWER_CACHE_LIMIT) {
         const oldest = this.answerCache.keys().next().value
@@ -305,6 +346,137 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       this.setChat({ ...chat, phase: 'error', error: (error as Error).message })
     }
+  }
+
+  /**
+   * Hazır bir cevabı model akışı gibi gösterir: kısa "düşünüyor" anı, ardından kelime grupları.
+   * Toplam süre cevap uzunluğuyla ölçeklenir ve sınırlıdır; yeni soru gelirse (`signal`) akış durur.
+   * Sesli cevapta seslendirme akışla birlikte başlar.
+   */
+  /**
+   * Karşı tarafın kesinleşmiş cümlesi. Ürün sorusuysa ve bilgi bankasında güçlü karşılığı varsa Island'da
+   * kaynaklı cevap hazırlar; karşılığı yoksa model çağırmadan "Doküman eksikleri"ne yazar.
+   * Kullanıcı Piqi'yle konuşurken araya girmez; aynı soruyu kısa sürede tekrar cevaplamaz.
+   */
+  onTheirs(event: TranscriptEvent, askedBy: string): void {
+    if (!event.final || !event.text.trim()) return
+    const question = detectQuestion(event.text)
+    this.lastTheirs = { text: event.text.trim(), askedBy, t: event.t }
+    if (question) this.lastTheirQuestion = { text: question, askedBy, t: event.t }
+    if (!question || !this.deps.settings().speech.autoAnswer) return
+    if (this.awaiting || (this.chat && this.chat.phase !== 'done' && this.chat.phase !== 'error')) return
+    const key = gapKey(question)
+    const now = Date.now()
+    for (const [k, t] of this.recentAuto) if (now - t > AUTO_REPEAT_MS) this.recentAuto.delete(k)
+    if (this.recentAuto.has(key)) return
+    this.recentAuto.set(key, now)
+
+    const hits = this.deps.knowledge.search(question, MODES.quick.hits)
+    if (!hits.length || (hits[0]!.coverage ?? 0) < AUTO_MIN_COVERAGE) {
+      this.deps.gaps.add({ question, askedBy, reason: 'no-source' })
+      return
+    }
+    void this.autoAnswer(question, askedBy, hits)
+  }
+
+  /**
+   * ⌘⇧Space: karşı tarafın son sorusunu (yoksa son cümlesini) hemen cevaplar. Otomatik cevap kapalıyken,
+   * kaynak zayıf olduğu için atlandığında ya da aynı soru yeniden sorulduğunda elle tetiklemek içindir.
+   */
+  answerNow(): void {
+    const now = Date.now()
+    const target =
+      this.lastTheirQuestion && now - this.lastTheirQuestion.t < ANSWER_NOW_QUESTION_MS
+        ? this.lastTheirQuestion
+        : this.lastTheirs && now - this.lastTheirs.t < ANSWER_NOW_SENTENCE_MS
+          ? this.lastTheirs
+          : null
+    if (!target) {
+      this.cancel()
+      this.setChat({
+        id: randomUUID(),
+        phase: 'error',
+        userText: '',
+        reply: '',
+        speaking: false,
+        usedMeetingContext: false,
+        sources: [],
+        confidence: 'general',
+        error: 'Karşı taraftan henüz bir soru duyulmadı. Toplantı dinlemesi açık ve karşı taraf transkripti etkin olmalı.'
+      })
+      return
+    }
+    this.cancel()
+    this.recentAuto.set(gapKey(target.text), now)
+    void this.autoAnswer(target.text, target.askedBy, this.deps.knowledge.search(target.text, MODES.quick.hits))
+  }
+
+  private async autoAnswer(question: string, askedBy: string, hits: KnowledgeHit[]): Promise<void> {
+    this.autoAbort?.abort()
+    const abort = new AbortController()
+    this.autoAbort = abort
+    const { island, llm, transcripts } = this.deps
+    const started = Date.now()
+    island.showQuestion(question, askedBy)
+
+    const approved = faqAnswer(question, hits[0])
+    if (approved) {
+      const id = island.beginAnswer({ question, askedBy, short: '', sources: [], confidence: 'grounded' })
+      const finished = await streamText(approved, abort.signal, (shown) => island.setAnswerText(id, shown))
+      if (finished) {
+        island.completeAnswer(id, {
+          ...splitAnswer(approved),
+          sources: [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }],
+          latencyMs: Date.now() - started
+        })
+      }
+      return
+    }
+
+    const product = this.deps.settings().product
+    const sources = sourcesBlock(question, hits, MODES.quick.budget)
+    const grounded = sources.used.length > 0
+    const context = tail(transcripts.recent(MEETING_CONTEXT_MS), MODES.quick.meetingChars)
+    const content = [
+      grounded ? `Kaynaklar:\n${sources.text}` : '',
+      context ? `Toplantının son iki dakikası:\n${context}` : '',
+      `${askedBy} toplantıda şunu sordu: ${question}\nBenim ona söyleyebileceğim cevabı ver.`
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const id = island.beginAnswer({ question, askedBy, short: '', sources: [], confidence: grounded ? 'partial' : 'general' })
+    let raw = ''
+    try {
+      const reply = await llm.streamText({
+        system: assistantSystem(product, { spoken: false, detailed: false, grounded }),
+        messages: [{ role: 'user', content }],
+        purpose: 'assistant',
+        maxTokens: 512,
+        signal: abort.signal,
+        onText: (delta) => {
+          if (abort.signal.aborted) return
+          raw += delta
+          island.setAnswerText(id, splitAnswer(stripCitations(raw)).short)
+        }
+      })
+      if (abort.signal.aborted) return
+      const cited = citations(reply, sources.used)
+      island.completeAnswer(id, { ...splitAnswer(stripCitations(reply)), ...cited, latencyMs: Date.now() - started })
+      if (cited.sources.length === 0) this.deps.gaps.add({ question, askedBy, reason: grounded ? 'general' : 'no-source' })
+    } catch (error) {
+      if (abort.signal.aborted) return
+      island.completeAnswer(id, { short: `Cevap hazırlanamadı: ${(error as Error).message}`, confidence: 'general' })
+    }
+  }
+
+  private async reveal(done: ChatView, signal: AbortSignal, spoken: boolean): Promise<void> {
+    const sink = spoken ? this.deps.voice.sentences() : null
+    sink?.push(done.reply)
+    this.setChat({ ...done, phase: 'thinking', reply: '', sources: [] })
+    const finished = await streamText(done.reply, signal, (reply) => this.setChat({ ...done, phase: 'answering', reply, sources: [] }))
+    if (!finished) return
+    this.setChat(done)
+    await sink?.end()
   }
 
   /**

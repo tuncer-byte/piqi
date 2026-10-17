@@ -21,6 +21,8 @@ export interface CaptureStatus {
   transcribing: AudioChannel[]
   /** Toplantı dinlemesi açık mı (false: yalnızca "Selam Piqi" uyandırma dinlemesi). */
   meeting?: boolean
+  /** Algılanan görüşme ("Microsoft Teams"); görüşme yoksa null. */
+  detectedMeeting?: string | null
 }
 
 /** 0..1 aralığında normalize edilmiş anlık ses seviyeleri. */
@@ -33,7 +35,12 @@ export interface AudioProcessInfo {
   pid: number
   bundleId: string
   isRunningOutput: boolean
+  /** Süreç mikrofonu kullanıyor (toplantı algılamanın sinyali). */
+  isRunningInput: boolean
 }
+
+/** Toplantı algılandığında: hiçbir şey yapma, Island'da sor ya da dinlemeyi kendiliğinden başlat. */
+export type MeetingDetection = 'off' | 'ask' | 'auto'
 
 export interface TranscriptEvent {
   channel: AudioChannel
@@ -114,6 +121,8 @@ export interface Settings {
   capture: CaptureOptions
   /** Ekran paylaşımında Island panelini gizle (içerik koruması). */
   hideInScreenShare: boolean
+  /** Teams, Zoom vb. görüşmeye girildiğinde ne yapılacağı. */
+  meetingDetection: MeetingDetection
   product: Product
   speech: {
     locale: 'tr-TR' | 'en-US'
@@ -125,6 +134,8 @@ export interface Settings {
     alwaysListen: boolean
     /** Karşı tarafta kaç kişi konuştuğunu ayırt et (cihaz üzerinde, kalıcı ses izi yok). */
     diarization: boolean
+    /** Karşı tarafın ürün sorusunu algılayıp kaynak varsa Island'da cevapla. */
+    autoAnswer: boolean
   }
   voice: {
     /** Seslendirme motoru: Apple (sistem) veya EMA Lightning (açık kaynak Türkçe, cihazda). */
@@ -191,6 +202,8 @@ export interface AuditEntry {
   outputChars: number
   /** Maskelenen veri türleri ve adetleri. */
   masked: Record<string, number>
+  /** İstekle gönderilen görsel sayısı (görsel içeriği maskelenemez). */
+  images?: number
   ms: number
   ok: boolean
   error?: string
@@ -220,6 +233,8 @@ export interface AnswerCard {
   feedback?: 'up' | 'down'
   latencyMs?: number
   createdAt: number
+  /** Bu cevap onaylı cevaplara (SSS) eklendi. */
+  savedFaq?: boolean
 }
 
 export type ChatPhase = 'listening' | 'thinking' | 'answering' | 'done' | 'error'
@@ -238,6 +253,8 @@ export interface ChatView {
   sources: SourceRef[]
   confidence: Confidence
   error?: string
+  /** Bu cevap onaylı cevaplara (SSS) eklendi. */
+  savedFaq?: boolean
 }
 
 export type IslandView =
@@ -247,6 +264,8 @@ export type IslandView =
   | { kind: 'answer'; answer: AnswerCard }
   | { kind: 'ask' }
   | { kind: 'chat'; chat: ChatView }
+  /** Toplantı algılandı; kullanıcıya dinlemeyi başlatmak isteyip istemediği sorulur. */
+  | { kind: 'meetingPrompt'; app: string }
 
 export interface NotchGeometry {
   /** Notch varsa genişliği ve yüksekliği (pt); yoksa null. */
@@ -293,3 +312,6 @@ export type IslandAction =
   | { type: 'askSubmit'; request: AskRequest }
   | { type: 'askVoice' }
   | { type: 'stopSpeaking' }
+  | { type: 'saveFaq' }
+  | { type: 'meetingStart' }
+  | { type: 'meetingDismiss' }

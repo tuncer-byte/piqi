@@ -13,11 +13,15 @@ const COLLAPSE_AFTER_LEAVE_MS = 8_000
 const DISMISS_ANSWER_MS = 60_000
 const DISMISS_CHAT_MS = 30_000
 const HISTORY_LIMIT = 20
+/** Yanıtlanmayan "toplantı algılandı" sorusu bu süre sonra kapanır. */
+const DISMISS_PROMPT_MS = 45_000
 
 interface IslandControllerEvents {
   snapshot: [IslandSnapshot]
   /** Controller'ın kendisinin işlemediği, uygulama düzeyindeki eylemler. */
   action: [IslandAction]
+  /** "SSS'ye ekle": gösterilen soru ve cevap onaylı cevaplara eklenecek. */
+  saveFaq: [{ question: string; answer: string }]
 }
 
 /**
@@ -29,6 +33,8 @@ export class IslandController extends EventEmitter<IslandControllerEvents> {
   private hovering = false
   private collapseTimer: NodeJS.Timeout | null = null
   private dismissTimer: NodeJS.Timeout | null = null
+  /** SSS'ye eklenen sohbet cevapları; Assistant sohbeti yeniden yazsa da işaret korunur. */
+  private savedChats = new Set<string>()
 
   constructor(
     geometry: NotchGeometry,
@@ -111,9 +117,29 @@ export class IslandController extends EventEmitter<IslandControllerEvents> {
     this.patchAnswer(id, (a) => ({ ...a, short: a.short + text }))
   }
 
-  completeAnswer(id: string, patch: Partial<Pick<AnswerCard, 'detail' | 'sources' | 'confidence' | 'latencyMs'>> = {}): void {
+  /** Akan cevabın metnini yerinde değiştirir (atıf numaraları ayıklanmış görünür metin). */
+  setAnswerText(id: string, short: string): void {
+    this.patchAnswer(id, (a) => ({ ...a, short }))
+  }
+
+  completeAnswer(id: string, patch: Partial<Pick<AnswerCard, 'short' | 'detail' | 'sources' | 'confidence' | 'latencyMs'>> = {}): void {
     this.patchAnswer(id, (a) => ({ ...a, ...patch, streaming: false }))
     this.scheduleDismiss()
+  }
+
+  // ── Toplantı algılama ──────────────────────────────────────────────────
+
+  /** "Teams toplantısı algılandı · Dinlemeye başla?" Kullanıcı Piqi'yle konuşuyorsa araya girmez. */
+  showMeetingPrompt(app: string): void {
+    const kind = this.snapshot.view.kind
+    if (kind === 'ask' || kind === 'chat' || kind === 'answer' || kind === 'question') return
+    this.clearTimers()
+    this.update({ view: { kind: 'meetingPrompt', app }, expanded: false })
+    this.dismissTimer = setTimeout(() => this.clearMeetingPrompt(), DISMISS_PROMPT_MS)
+  }
+
+  clearMeetingPrompt(): void {
+    if (this.snapshot.view.kind === 'meetingPrompt') this.rest()
   }
 
   // ── Kullanıcı–Piqi konuşması ve prova ──────────────────────────────────
@@ -125,7 +151,8 @@ export class IslandController extends EventEmitter<IslandControllerEvents> {
 
   setChat(chat: ChatView): void {
     this.clearTimers()
-    this.update({ view: { kind: 'chat', chat }, wakeHint: false })
+    const saved = this.savedChats.has(chat.id) ? { ...chat, savedFaq: true } : chat
+    this.update({ view: { kind: 'chat', chat: saved }, wakeHint: false })
     if (chat.phase === 'done' || chat.phase === 'error') this.scheduleDismiss()
   }
 
@@ -178,6 +205,24 @@ export class IslandController extends EventEmitter<IslandControllerEvents> {
         this.emit('action', action)
         break
       }
+      case 'meetingStart':
+      case 'meetingDismiss':
+        this.clearMeetingPrompt()
+        this.emit('action', action)
+        break
+      case 'saveFaq': {
+        const view = this.snapshot.view
+        if (view.kind === 'answer' && !view.answer.streaming && !view.answer.savedFaq) {
+          const { answer } = view
+          this.emit('saveFaq', { question: answer.question, answer: answer.detail ? `${answer.short}\n\n${answer.detail}` : answer.short })
+          this.patchAnswer(answer.id, (a) => ({ ...a, savedFaq: true }))
+        } else if (view.kind === 'chat' && view.chat.phase === 'done' && !view.chat.savedFaq && view.chat.reply) {
+          this.emit('saveFaq', { question: view.chat.userText, answer: view.chat.reply })
+          this.savedChats.add(view.chat.id)
+          this.update({ view: { kind: 'chat', chat: { ...view.chat, savedFaq: true } } })
+        }
+        break
+      }
       case 'history': {
         const index = this.snapshot.historyIndex + action.step
         const target = this.snapshot.history[index]
@@ -187,40 +232,6 @@ export class IslandController extends EventEmitter<IslandControllerEvents> {
       default:
         this.emit('action', action)
     }
-  }
-
-  /** Demo akışı: soru algılandı → kısa cevap akar → detay hazır. */
-  runDemo(): void {
-    const question = 'Rate limit kaç ve aşılırsa ne olur?'
-    this.showQuestion(question, 'Elif Kaya')
-    setTimeout(() => {
-      const started = Date.now()
-      const id = this.beginAnswer({ question, askedBy: 'Elif Kaya', short: '', sources: [], confidence: 'grounded' })
-      const words = 'Dakikada 600 istek / API key. Aşılırsa `429` döner; `Retry-After` header’ı bekleme süresini verir.'.split(' ')
-      words.forEach((word, i) => {
-        setTimeout(() => {
-          this.appendAnswer(id, (i === 0 ? '' : ' ') + word)
-          if (i !== words.length - 1) return
-          this.completeAnswer(id, {
-            latencyMs: Date.now() - started + 900,
-            sources: [
-              { id: 's1', label: 'API-Guide.pdf · s.14' },
-              { id: 's2', label: 'src/auth/RateLimiter.ts:42' }
-            ],
-            detail: [
-              '- Limit API key başınadır, IP başına değil.',
-              '- Aşımda yanıt gövdesi `RATE_LIMITED` hata kodunu taşır.',
-              '- İstemci, `Retry-After` saniyesi kadar bekleyip yeniden dener.',
-              '',
-              '```src/auth/RateLimiter.ts:42',
-              'const LIMIT = 600; // per minute',
-              'if (count > LIMIT) throw new TooManyRequests(retryAfter);',
-              '```'
-            ].join('\n')
-          })
-        }, 55 * i)
-      })
-    }, 900)
   }
 
   private copyText(): string | null {
