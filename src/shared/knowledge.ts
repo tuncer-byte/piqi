@@ -181,6 +181,8 @@ export interface KnowledgeHit {
   title: string
   text: string
   score: number
+  /** Sorudaki kavramların bu parçada karşılanan oranı (0–1). */
+  coverage?: number
 }
 
 export interface FaqEntry {

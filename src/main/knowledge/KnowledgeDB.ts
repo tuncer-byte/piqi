@@ -3,7 +3,15 @@ import { dirname } from 'node:path'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import type { FaqEntry, KnowledgeHit, SourceKind, SourceRecord } from '@shared/knowledge'
 import type { Chunk } from './chunker'
-import { buildFtsQuery, identifierWords } from './query'
+import { buildFtsQuery, coverage, identifierWords, queryConcepts, wordSet } from './query'
+
+/** FTS5'ten yeniden sıralama için alınan aday parça sayısı. */
+const CANDIDATES = 60
+/** En iyi sonucun bu oranının altında kalan parçalar modele gönderilmez. */
+const MIN_RELATIVE_SCORE = 0.3
+const MIN_RELATIVE_COVERAGE = 0.5
+/** Kapsamanın BM25'e etkisi: puan × (taban + kapsama). Taban büyüdükçe BM25 sırası daha az değişir. */
+const COVERAGE_BASE = 0.5
 
 export interface DocumentRow {
   id: number
@@ -18,6 +26,7 @@ export interface DocumentRow {
 export class KnowledgeDB {
   private db: DatabaseSync
   private stmts: Record<string, StatementSync> = {}
+  private meta: { names: Map<string, string>; priority: Set<string> } | null = null
 
   constructor(file: string) {
     if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true })
@@ -50,6 +59,7 @@ export class KnowledgeDB {
   // ── Kaynaklar ──────────────────────────────────────────────────────────
 
   saveSource(source: SourceRecord): void {
+    this.meta = null
     this.stmt('INSERT INTO sources (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data').run(source.id, JSON.stringify(source))
   }
 
@@ -69,6 +79,7 @@ export class KnowledgeDB {
   }
 
   deleteSource(id: string): void {
+    this.meta = null
     this.transaction(() => {
       for (const doc of this.documents(id)) this.deleteDocument(doc.id)
       this.stmt('DELETE FROM sources WHERE id = ?').run(id)
@@ -176,8 +187,9 @@ export class KnowledgeDB {
   // ── Arama ──────────────────────────────────────────────────────────────
 
   /**
-   * BM25 sıralı arama. Ağırlıklar: semboller > anahtar kelimeler (kartlar) > başlık > metin.
-   * Aynı belgeden en fazla 2 parça döner; öncelikli kaynaklar ve SSS öne alınır.
+   * BM25 sıralı arama, ardından kavram kapsamasıyla yeniden sıralama: sorudaki kavramların çoğunu karşılayan
+   * parça, tek bir kelimesi çok geçen parçanın önüne geçer. En iyi sonuca göre zayıf kalan parçalar elenir;
+   * böylece modele alakasız bağlam gitmez. Aynı belgeden en fazla 2 parça döner; öncelikli kaynaklar ve SSS öne alınır.
    */
   search(question: string, options: { limit?: number; extra?: string[]; priority?: Set<string> } = {}): KnowledgeHit[] {
     const query = buildFtsQuery(question, options.extra)
@@ -189,34 +201,57 @@ export class KnowledgeDB {
         `SELECT c.id, c.doc_id, c.source_id, c.kind, c.label, c.title, c.text, bm25(chunks_fts, 1.0, 1.6, 3.0, 2.2) AS score
          FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid
         WHERE chunks_fts MATCH ?
-         ORDER BY score LIMIT 60`
+         ORDER BY score LIMIT ${CANDIDATES}`
       ).all(query) as typeof rows
     } catch {
       return []
     }
-    const names = new Map(this.sources().map((s) => [s.id, s.name]))
+    if (!rows.length) return []
+    const meta = this.sourceMeta()
+    const priority = options.priority ?? meta.priority
+    const concepts = queryConcepts(question)
+    const ranked = rows
+      .map((r) => {
+        const covered = coverage(concepts, wordSet(`${r.title} ${r.text}`))
+        const boost = r.kind === 'faq' ? 1.6 : priority.has(r.source_id) ? 1.3 : 1
+        // bm25 negatiftir (küçük = iyi); pozitif alaka puanına çevrilir.
+        return { ...r, covered, relevance: -r.score * boost * (COVERAGE_BASE + covered) }
+      })
+      .sort((a, b) => b.relevance - a.relevance)
+    const best = ranked[0]!
     const perDoc = new Map<number, number>()
     const hits: KnowledgeHit[] = []
-    const boosted = rows
-      .map((r) => ({ ...r, score: r.score * (r.kind === 'faq' ? 1.6 : options.priority?.has(r.source_id) ? 1.3 : 1) }))
-      .sort((a, b) => a.score - b.score)
-    for (const r of boosted) {
+    for (const r of ranked) {
+      if (r.relevance < best.relevance * MIN_RELATIVE_SCORE || r.covered < best.covered * MIN_RELATIVE_COVERAGE) continue
       const n = perDoc.get(r.doc_id) ?? 0
       if (n >= 2) continue
       perDoc.set(r.doc_id, n + 1)
       hits.push({
         chunkId: r.id,
         sourceId: r.source_id,
-        sourceName: names.get(r.source_id) ?? '',
+        sourceName: meta.names.get(r.source_id) ?? '',
         kind: r.kind,
         label: r.label,
         title: r.title,
         text: r.text,
-        score: -r.score
+        score: r.relevance,
+        coverage: r.covered
       })
       if (hits.length >= limit) break
     }
     return hits
+  }
+
+  /** Aramada her sorguda kaynak JSON'larını çözmemek için ad ve öncelik bilgisi önbelleklenir. */
+  private sourceMeta(): { names: Map<string, string>; priority: Set<string> } {
+    if (!this.meta) {
+      const sources = this.sources()
+      this.meta = {
+        names: new Map(sources.map((s) => [s.id, s.name])),
+        priority: new Set(sources.filter((s) => s.priority).map((s) => s.id))
+      }
+    }
+    return this.meta
   }
 
   // ── SSS ────────────────────────────────────────────────────────────────

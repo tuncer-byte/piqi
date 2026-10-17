@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { KnowledgeHit } from '@shared/knowledge'
 import type { AskRequest, ChatView, Confidence, Settings, SourceRef, TranscriptEvent } from '@shared/types'
 import type { IslandController } from '../island/IslandController'
+import { queryConcepts } from '../knowledge/query'
+import { faqAnswer, sourcesBlock, type ContextBudget } from '../knowledge/snippet'
 import type { ChatMessage, LlmService } from '../llm/LlmService'
 import { assistantSystem } from '../llm/prompts'
 import { detectSleep, detectWake } from '../speech/wakeWord'
@@ -15,6 +17,17 @@ const MEETING_CONTEXT_MS = 2 * 60_000
 const MAX_FOLLOW_UP_TURNS = 6
 const ANSWER_CACHE_TTL_MS = 90_000
 const ANSWER_CACHE_LIMIT = 40
+/** Takip sorusu tarihçesinde bir cevaptan saklanan en fazla karakter (her turda yeniden gönderilir). */
+const HISTORY_REPLY_CHARS = 600
+/** Bu kadar az kavram taşıyan soru önceki soruya bağlı sayılır ("peki Enterprise'da?"); arama onunla genişletilir. */
+const FOLLOW_UP_CONCEPTS = 3
+
+/** Cevap türüne göre aranan parça sayısı, kaynak bloğu bütçesi ve toplantı bağlamı üst sınırı (karakter). */
+const MODES: Record<'spoken' | 'quick' | 'detailed', { hits: number; budget: ContextBudget; meetingChars: number }> = {
+  spoken: { hits: 4, budget: { total: 2_400, perHit: 900 }, meetingChars: 1_200 },
+  quick: { hits: 5, budget: { total: 3_600, perHit: 1_100 }, meetingChars: 1_500 },
+  detailed: { hits: 8, budget: { total: 8_000, perHit: 1_800 }, meetingChars: 3_000 }
+}
 
 interface Deps {
   llm: LlmService
@@ -24,16 +37,15 @@ interface Deps {
   settings: () => Settings
   /** Mikrofon yakalama ve konuşma tanıma açık değilse açar. */
   ensureMic: () => Promise<void>
-  knowledge: { search(question: string, limit?: number): KnowledgeHit[] }
+  knowledge: { search(question: string, limit?: number, extra?: string[]): KnowledgeHit[] }
 }
 
-const SOURCE_CHARS = 1400
-
-/** Bilgi bankası parçalarını numaralı kaynak bloğuna çevirir. */
-function sourcesBlock(hits: KnowledgeHit[]): string {
-  return hits
-    .map((h, i) => `[${i + 1}] ${h.label}${h.kind === 'faq' ? ' (onaylı cevap)' : ''}\n${h.text.slice(0, SOURCE_CHARS)}`)
-    .join('\n\n')
+/** Metnin son `max` karakteri; satır ortasından başlamaz. */
+function tail(text: string, max: number): string {
+  if (text.length <= max) return text
+  const cut = text.slice(-max)
+  const newline = cut.indexOf('\n')
+  return newline >= 0 && newline < cut.length - 1 ? cut.slice(newline + 1) : cut
 }
 
 /** Cevaptaki [n] atıflarını kaynak etiketlerine çevirir; ekranda numaralar gizlenir. */
@@ -181,11 +193,15 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     const settings = this.deps.settings()
     const product = settings.product
 
-    const context = options.useMeetingContext ? transcripts.recent(MEETING_CONTEXT_MS) : ''
     const spoken = options.fromVoice && (await voice.shouldSpeak())
-    // Yerel arama (maliyetsiz, ~10 ms): soruya en alakalı 6 parça.
-    const hits = this.deps.knowledge.search(question, 6)
+    const mode = MODES[options.detailed ? 'detailed' : spoken ? 'spoken' : 'quick']
+    const context = options.useMeetingContext ? tail(transcripts.recent(MEETING_CONTEXT_MS), mode.meetingChars) : ''
     if (Date.now() - this.lastTurnAt > FOLLOW_UP_WINDOW_MS) this.turns = []
+    // Kısa takip sorusu: bir önceki soru aramayı genişletir (sıralamayı yine bu soru belirler).
+    const previous = this.turns.findLast((t) => t.role === 'user')?.content
+    const extra = previous && queryConcepts(question).length <= FOLLOW_UP_CONCEPTS ? [previous] : undefined
+    // Yerel arama (maliyetsiz, ~10 ms); zayıf eşleşmeler arama katmanında elenir.
+    const hits = this.deps.knowledge.search(question, mode.hits, extra)
     const cacheKey = createHash('sha256')
       .update(
         JSON.stringify([
@@ -214,6 +230,29 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     }
     if (cached) this.answerCache.delete(cacheKey)
 
+    // Onaylı SSS birebir karşılıyorsa model çağrılmaz: anında ve token harcamadan.
+    const approved = options.detailed ? null : faqAnswer(question, hits[0])
+    if (approved) {
+      const chat: ChatView = {
+        id: randomUUID(),
+        phase: 'done',
+        userText: question,
+        reply: approved,
+        speaking: false,
+        usedMeetingContext: false,
+        sources: [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }],
+        confidence: 'grounded'
+      }
+      this.setChat(chat)
+      this.remember(question, approved)
+      if (spoken) {
+        const sink = voice.sentences()
+        sink.push(approved)
+        await sink.end()
+      }
+      return
+    }
+
     let chat: ChatView = {
       id: randomUUID(),
       phase: 'thinking',
@@ -226,8 +265,9 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     }
     this.setChat(chat)
 
+    const sources = sourcesBlock(question, hits, mode.budget)
     const parts = [
-      hits.length ? `Kaynaklar:\n${sourcesBlock(hits)}` : '',
+      sources.used.length ? `Kaynaklar:\n${sources.text}` : '',
       context ? `Toplantının son iki dakikası:\n${context}` : '',
       `Sorum: ${question}`
     ].filter(Boolean)
@@ -238,7 +278,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
 
     try {
       const reply = await llm.streamText({
-        system: assistantSystem(product, { spoken, detailed: options.detailed, grounded: hits.length > 0 }),
+        system: assistantSystem(product, { spoken, detailed: options.detailed, grounded: sources.used.length > 0 }),
         messages,
         purpose: 'assistant',
         maxTokens: options.detailed ? 1_800 : spoken ? 384 : 512,
@@ -252,12 +292,8 @@ export class Assistant extends EventEmitter<AssistantEvents> {
         }
       })
       if (abort.signal.aborted) return
-      // Takip soruları için kaynak bloğu tarihçeye girmez (bağlam şişmesin); yalnızca soru ve cevap.
-      this.turns = [...this.turns, { role: 'user' as const, content: question }, { role: 'assistant' as const, content: stripCitations(reply) }].slice(
-        -MAX_FOLLOW_UP_TURNS * 2
-      )
-      this.lastTurnAt = Date.now()
-      chat = { ...chat, phase: 'done', reply: stripCitations(reply), ...citations(reply, hits) }
+      this.remember(question, stripCitations(reply))
+      chat = { ...chat, phase: 'done', reply: stripCitations(reply), ...citations(reply, sources.used) }
       this.setChat(chat)
       if (this.answerCache.size >= ANSWER_CACHE_LIMIT) {
         const oldest = this.answerCache.keys().next().value
@@ -269,6 +305,18 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       this.setChat({ ...chat, phase: 'error', error: (error as Error).message })
     }
+  }
+
+  /**
+   * Takip soruları için turu saklar. Kaynak bloğu tarihçeye girmez ve cevap kısaltılır: tarihçe her
+   * istekte yeniden gönderildiğinden bağlam ve token şişmesin.
+   */
+  private remember(question: string, reply: string): void {
+    const short = reply.length > HISTORY_REPLY_CHARS ? `${reply.slice(0, HISTORY_REPLY_CHARS).trimEnd()}…` : reply
+    this.turns = [...this.turns, { role: 'user' as const, content: question }, { role: 'assistant' as const, content: short }].slice(
+      -MAX_FOLLOW_UP_TURNS * 2
+    )
+    this.lastTurnAt = Date.now()
   }
 
   private setChat(chat: ChatView): void {
