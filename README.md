@@ -11,23 +11,10 @@ Piqi is a desktop assistant, not a meeting bot. It does not join calls or speak 
 
 > **Project status:** Piqi is under active development. The current app supports live transcription, source management, and in-meeting assistance. Persistent meeting history, automatic summaries, and packaged distribution are not complete yet.
 
-## Screenshots
-
 <p align="center">
-  <img src="docs/screenshots/island-answer.png" alt="Piqi Island showing a short, source-linked answer to a question asked in a meeting" width="680" />
+  <img src="docs/screenshots/island-meeting.gif" alt="Piqi Island detecting a question in a meeting, streaming a short source-linked answer, then expanding detail with a code excerpt and source list" width="760" />
 </p>
-<p align="center"><em>The Island: a short answer with its source, shown at the top of the screen while the meeting continues.</em></p>
-
-<p align="center">
-  <img src="docs/screenshots/island-detail.png" alt="Expanded Island answer with detail bullets and a code excerpt" width="680" />
-</p>
-<p align="center"><em>Expanded detail with supporting points and the relevant code excerpt.</em></p>
-
-| Sources | Models and providers | Privacy and compliance |
-|---|---|---|
-| <img src="docs/screenshots/sources.png" alt="Sources screen listing document, code, and approved Q&A sources with index statistics" /> | <img src="docs/screenshots/models.png" alt="Models and providers settings with the active model and thinking depth" /> | <img src="docs/screenshots/privacy.png" alt="Privacy and compliance settings with data policy toggles and a data-flow table" /> |
-
-Screenshots use a demo profile indexed with this repository's own documentation and code. The Island answer is the app's built-in demo content.
+<p align="center"><sub>A question is detected in the meeting, a short answer streams in with its source, and the detail view adds supporting points, code, and the source list.</sub></p>
 
 ## What Piqi Does
 
@@ -52,16 +39,54 @@ Open **Sources**, select **Add source**, and choose a source type. You can add:
 | Notion | Pages accessible to a Notion integration |
 | Approved Q&A | Curated question-and-answer pairs for stable product facts |
 
-For code repositories, Piqi scans the folder tree, observes `.gitignore` by default, and lets you choose folders and categories before indexing. Local code and document sources can be configured for change watching. The Sources screen shows source status and available counts, including indexed files, code lines, and chunks. Use **Reindex** to refresh a source manually.
+For code repositories, Piqi scans the folder tree, observes `.gitignore` by default, and lets you choose folders and categories before indexing.
+
+<p align="center">
+  <img src="docs/screenshots/add-code.png" alt="Add source panel for a code repository showing detected folders, their categories, language breakdown, and estimated chunk count" width="820" />
+</p>
+<p align="center"><sub>Adding a code repository: review detected folders and categories, then index.</sub></p>
+
+Local code and document sources can be configured for change watching. The Sources screen shows source status and available counts, including indexed files, code lines, and chunks. Use **Reindex** to refresh a source manually.
+
+<p align="center">
+  <img src="docs/screenshots/sources.png" alt="Sources screen listing document, code, and approved Q&A sources with knowledge pool statistics" width="820" />
+</p>
+<p align="center"><sub>The Sources screen with documents, a code repository, and approved answers indexed.</sub></p>
 
 ## Use Piqi in a Meeting
 
-1. Add and index the documents, repositories, and other sources you want Piqi to consult.
-2. Open **Settings → Models and providers** and select a model provider. Add the provider credential in the app, or configure a compatible local endpoint.
-3. Review **Settings → Privacy and compliance**. Choose whether cloud models are allowed and whether personal data should be masked before a request is sent.
-4. Grant the macOS permissions needed for the capture options you enable. Configure microphone and system-audio capture in **Settings → Audio**.
-5. Start listening from the app or menu bar. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
-6. Say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to open the ask panel. Review the answer and its source references in the Island.
+### 1. Add your sources
+
+Add and index the documents, repositories, and other sources you want Piqi to consult, as described in [Add Knowledge Sources](#add-knowledge-sources).
+
+### 2. Choose a model
+
+Open **Settings → Models and providers** and select a model provider. Add the provider credential in the app, or configure a compatible local endpoint. **Thinking depth** trades speed for thoroughness; **Fast** is recommended during live meetings.
+
+<p align="center">
+  <img src="docs/screenshots/models.png" alt="Models and providers settings showing the active provider, model, thinking depth, and provider list" width="820" />
+</p>
+
+### 3. Review privacy settings
+
+Review **Settings → Privacy and compliance**. Choose whether cloud models are allowed and whether personal data should be masked before a request is sent. The table below the switches shows where each kind of data goes under the current policy.
+
+<p align="center">
+  <img src="docs/screenshots/privacy.png" alt="Privacy and compliance settings with data policy switches and a table of where each kind of data goes" width="820" />
+</p>
+
+### 4. Grant permissions and start listening
+
+Grant the macOS permissions needed for the capture options you enable, and configure microphone and system-audio capture in **Settings → Audio**. Start listening from the app or menu bar. The **Meetings** page shows the live transcript and, when enabled, the detected speakers.
+
+### 5. Ask Piqi
+
+When a question comes up, Piqi shows the answer and its sources in the Island at the top of the screen. You can also say **“Selam Piqi”** to ask by voice, or press **⌘⇧K** to type a question. Questions that match an approved answer are answered instantly from your knowledge base, without a model call.
+
+<p align="center">
+  <img src="docs/screenshots/island-ask.gif" alt="Typing a question into the ⌘⇧K ask panel and receiving an instant answer from an approved Q&A entry" width="760" />
+</p>
+<p align="center"><sub>⌘⇧K: a typed question answered from an approved Q&amp;A entry.</sub></p>
 
 The global **⌘⇧L** shortcut starts or stops listening. Other shortcuts are listed in **Settings → Shortcuts**. Shortcut registration may fail if another application already uses the same combination.
 
@@ -122,6 +147,10 @@ npm run dist      # Package a macOS app
 | `native/piqi-tts` | Rust-based local text-to-speech helper |
 | `resources` | Application resources, including the Piqi icon used above |
 | `docs/PRD.md` | Product requirements and design context; some items describe future work |
+
+## About the Screenshots
+
+Screenshots and recordings come from a demo profile indexed with this repository's own documentation and code. The meeting recording uses the app's built-in Island demo content; the ⌘⇧K recording is a real answer from an approved Q&A entry in that profile.
 
 ## Contributing
 
