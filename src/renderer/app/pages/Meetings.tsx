@@ -4,6 +4,7 @@ import type { MeetingPeople, TranscriptEvent } from '@shared/types'
 import { useCaptureStatus, usePeople } from '../../shared/hooks'
 import { PiqiMark } from '../../shared/PiqiMark'
 import type { PageProps } from '../App'
+import { MeetingDetail, MeetingHistoryList, useMeetings } from './MeetingHistory'
 import { Badge, Button, Card, EmptyState, Label, PageHeader, TextField } from '../ui'
 
 interface Line {
@@ -37,6 +38,13 @@ function useLiveTranscript(limit = 80): Line[] {
 }
 
 export function MeetingsPage({ settings }: PageProps): ReactNode {
+  const [selected, setSelected] = useState<string | null>(null)
+  if (selected) return <MeetingDetail id={selected} onBack={() => setSelected(null)} />
+  return <LiveAndHistory settings={settings} onOpen={setSelected} />
+}
+
+function LiveAndHistory({ settings, onOpen }: Pick<PageProps, 'settings'> & { onOpen: (id: string) => void }): ReactNode {
+  const meetings = useMeetings()
   const status = useCaptureStatus()
   const lines = useLiveTranscript()
   const people = usePeople()
@@ -105,6 +113,8 @@ export function MeetingsPage({ settings }: PageProps): ReactNode {
         </div>
       </Card>
 
+
+      <MeetingHistoryList meetings={meetings?.filter((m) => m.status !== 'live') ?? null} enabled={settings.history.enabled} onOpen={onOpen} />
     </>
   )
 }

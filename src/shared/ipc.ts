@@ -12,6 +12,7 @@ import type {
   Tactic,
   TriagePlan
 } from './knowledge'
+import type { MeetingListItem, MeetingRecord } from './meetings'
 import type {
   AskRequest,
   AuditEntry,
@@ -96,6 +97,11 @@ export const IPC = {
   faqList: 'faq:list',
   faqSave: 'faq:save',
   faqDelete: 'faq:delete',
+  meetingsList: 'meetings:list',
+  meetingsChanged: 'meetings:changed',
+  meetingGet: 'meetings:get',
+  meetingDelete: 'meetings:delete',
+  meetingResummarize: 'meetings:resummarize',
   gapsList: 'gaps:list',
   gapsChanged: 'gaps:changed',
   gapsRemove: 'gaps:remove',
@@ -182,6 +188,14 @@ export interface PiqiApi {
   }
   app: {
     onNavigate(cb: (page: string) => void): Unsubscribe
+  }
+  meetings: {
+    /** Geçmiş toplantılar, en yeni önce. */
+    list(): Promise<MeetingListItem[]>
+    get(id: string): Promise<MeetingRecord | null>
+    remove(id: string): Promise<MeetingListItem[]>
+    resummarize(id: string): void
+    onChange(cb: (meetings: MeetingListItem[]) => void): Unsubscribe
   }
   knowledge: {
     /** Tek ürün bilgi havuzundaki kaynaklar ve toplamlar. */
