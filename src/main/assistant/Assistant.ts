@@ -21,6 +21,12 @@ const ANSWER_CACHE_LIMIT = 40
 const HISTORY_REPLY_CHARS = 600
 /** Bu kadar az kavram taşıyan soru önceki soruya bağlı sayılır ("peki Enterprise'da?"); arama onunla genişletilir. */
 const FOLLOW_UP_CONCEPTS = 3
+/** Hazır cevaplar (SSS, önbellek) bir anda belirmesin: kısa düşünme anı, ardından kelime kelime akış. */
+const REVEAL_THINK_MS = 180
+const REVEAL_TICK_MS = 30
+const REVEAL_MS_PER_WORD = 40
+const REVEAL_MIN_MS = 300
+const REVEAL_MAX_MS = 900
 
 /** Cevap türüne göre aranan parça sayısı, kaynak bloğu bütçesi ve toplantı bağlamı üst sınırı (karakter). */
 const MODES: Record<'spoken' | 'quick' | 'detailed', { hits: number; budget: ContextBudget; meetingChars: number }> = {
@@ -218,14 +224,8 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       .digest('hex')
     const cached = this.answerCache.get(cacheKey)
     if (cached && Date.now() - cached.createdAt < ANSWER_CACHE_TTL_MS) {
-      const cachedChat = { ...cached.chat, id: randomUUID(), speaking: false }
-      this.setChat(cachedChat)
       this.lastTurnAt = Date.now()
-      if (spoken) {
-        const sink = voice.sentences()
-        sink.push(cachedChat.reply)
-        await sink.end()
-      }
+      await this.reveal({ ...cached.chat, id: randomUUID(), speaking: false }, abort.signal, spoken)
       return
     }
     if (cached) this.answerCache.delete(cacheKey)
@@ -233,6 +233,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
     // Onaylı SSS birebir karşılıyorsa model çağrılmaz: anında ve token harcamadan.
     const approved = options.detailed ? null : faqAnswer(question, hits[0])
     if (approved) {
+      this.remember(question, approved)
       const chat: ChatView = {
         id: randomUUID(),
         phase: 'done',
@@ -243,13 +244,7 @@ export class Assistant extends EventEmitter<AssistantEvents> {
         sources: [{ id: String(hits[0]!.chunkId), label: hits[0]!.label }],
         confidence: 'grounded'
       }
-      this.setChat(chat)
-      this.remember(question, approved)
-      if (spoken) {
-        const sink = voice.sentences()
-        sink.push(approved)
-        await sink.end()
-      }
+      await this.reveal(chat, abort.signal, spoken)
       return
     }
 
@@ -305,6 +300,31 @@ export class Assistant extends EventEmitter<AssistantEvents> {
       if (abort.signal.aborted) return
       this.setChat({ ...chat, phase: 'error', error: (error as Error).message })
     }
+  }
+
+  /**
+   * Hazır bir cevabı model akışı gibi gösterir: kısa "düşünüyor" anı, ardından kelime grupları.
+   * Toplam süre cevap uzunluğuyla ölçeklenir ve sınırlıdır; yeni soru gelirse (`signal`) akış durur.
+   * Sesli cevapta seslendirme akışla birlikte başlar.
+   */
+  private async reveal(done: ChatView, signal: AbortSignal, spoken: boolean): Promise<void> {
+    const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+    const sink = spoken ? this.deps.voice.sentences() : null
+    sink?.push(done.reply)
+    this.setChat({ ...done, phase: 'thinking', reply: '', sources: [] })
+    await wait(REVEAL_THINK_MS)
+
+    const words = done.reply.split(/(?<=\s)/)
+    const duration = Math.min(REVEAL_MAX_MS, Math.max(REVEAL_MIN_MS, words.length * REVEAL_MS_PER_WORD))
+    const perTick = Math.max(1, Math.ceil(words.length / (duration / REVEAL_TICK_MS)))
+    for (let shown = perTick; shown < words.length; shown += perTick) {
+      if (signal.aborted) return
+      this.setChat({ ...done, phase: 'answering', reply: words.slice(0, shown).join(''), sources: [] })
+      await wait(REVEAL_TICK_MS)
+    }
+    if (signal.aborted) return
+    this.setChat(done)
+    await sink?.end()
   }
 
   /**

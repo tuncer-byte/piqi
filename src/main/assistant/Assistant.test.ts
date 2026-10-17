@@ -38,7 +38,7 @@ describe('Assistant repeat-answer cache', () => {
     expect(streamText.mock.calls[0]?.[0]).toMatchObject({ maxTokens: 512 })
 
     assistant.ask({ text: 'Rate limit kaç?', useMeetingContext: false, detailed: false })
-    expect(chats.at(-1)).toMatchObject({ phase: 'done', reply: 'Yerel cevap.' })
+    await vi.waitFor(() => expect(chats.at(-1)).toMatchObject({ phase: 'done', reply: 'Yerel cevap.' }))
     expect(streamText).toHaveBeenCalledTimes(1)
   })
 })
@@ -92,6 +92,39 @@ describe('Assistant token ve hız iyileştirmeleri', () => {
     await vi.waitFor(() => expect(chats.at(-1)?.phase).toBe('done'))
     expect(streamText).not.toHaveBeenCalled()
     expect(chats.at(-1)).toMatchObject({ reply: 'Dakikada 6000 istek.', confidence: 'grounded', sources: [{ label: 'SSS' }] })
+  })
+
+  it('hazır cevabı bir anda değil, düşünme anı ve kelime kelime akışla gösterir', async () => {
+    const answer = 'Limit API anahtarı başınadır ve dakikada 6000 istek olarak uygulanır.'
+    const faq = hit(`Soru: Enterprise pakette rate limit kaç?\nOnaylı cevap: ${answer}`, {
+      kind: 'faq',
+      label: 'SSS',
+      title: 'Enterprise pakette rate limit kaç?'
+    })
+    const { assistant, chats } = setup([faq])
+    assistant.ask({ text: 'Enterprise paketinde rate limit kaçtır?', useMeetingContext: false, detailed: false })
+    await vi.waitFor(() => expect(chats.at(-1)?.phase).toBe('done'), { timeout: 2_000 })
+    const phases = chats.map((c) => c.phase)
+    expect(phases[0]).toBe('thinking')
+    const partial = chats.filter((c) => c.phase === 'answering').map((c) => c.reply)
+    expect(partial.length).toBeGreaterThan(2)
+    expect(partial.every((r, i) => answer.startsWith(r) && (i === 0 || r.length > partial[i - 1]!.length))).toBe(true)
+    expect(chats.filter((c) => c.phase !== 'done').every((c) => c.sources.length === 0)).toBe(true)
+  })
+
+  it('yeni soru gelince süren akışı keser', async () => {
+    const faq = hit('Soru: Enterprise pakette rate limit kaç?\nOnaylı cevap: Dakikada 6000 istek ve aşımda 429 döner.', {
+      kind: 'faq',
+      label: 'SSS',
+      title: 'Enterprise pakette rate limit kaç?'
+    })
+    const { assistant, chats } = setup([faq])
+    assistant.ask({ text: 'Enterprise paketinde rate limit kaçtır?', useMeetingContext: false, detailed: false })
+    await vi.waitFor(() => expect(chats.at(-1)?.phase).toBe('answering'))
+    assistant.cancel()
+    const count = chats.length
+    await new Promise((r) => setTimeout(r, 400))
+    expect(chats.length).toBe(count)
   })
 
   it('uzun kaynakları bütçeye göre kırpar', async () => {
