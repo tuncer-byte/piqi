@@ -33,10 +33,15 @@ function ago(ts: number | null): string {
   return hours < 24 ? `${hours} sa önce` : `${Math.round(hours / 24)} gün önce`
 }
 
-export function SourcesPage({ settings }: PageProps): ReactNode {
+export function SourcesPage({ settings, intent, clearIntent }: PageProps): ReactNode {
   const product = settings.product
   const overview = useKnowledge()
   const [dialog, setDialog] = useState<{ kind?: SourceKind; paths?: string[] } | null>(null)
+  useEffect(() => {
+    if (intent !== 'add-source') return
+    setDialog({})
+    clearIntent?.()
+  }, [intent, clearIntent])
   const [dragging, setDragging] = useState(false)
   const [faqCount, setFaqCount] = useState(0)
   const sources = overview?.sources ?? []
@@ -196,8 +201,8 @@ function EmptySources({ onAdd }: { onAdd: (kind: SourceKind) => void }): ReactNo
   const items: { kind: SourceKind; tile: string; title: string; text: string }[] = [
     { kind: 'code', tile: 'KOD', title: 'Kod reposu', text: 'Yerel klasör veya Git. Yapay zeka nerenin taranacağını önerir.' },
     { kind: 'files', tile: 'DOK', title: 'Dokümanlar', text: 'PDF, DOCX, PPTX, XLSX, MD ve görseller — sayfa atıflı cevaplar.' },
-    { kind: 'confluence', tile: 'CNF', title: 'Confluence ve Notion', text: 'Space ve sayfalar, kullanıcıya özel jetonla.' },
-    { kind: 'faq', tile: 'SSS', title: 'Onaylı cevaplar', text: 'Soru → cevap çiftleri; aramada en yüksek öncelik.' }
+    // Onaylı cevaplar her durumda listenin altındaki SSS kartında; burada tekrar gösterilmez.
+    { kind: 'confluence', tile: 'CNF', title: 'Confluence ve Notion', text: 'Space ve sayfalar, kullanıcıya özel jetonla.' }
   ]
   return (
     <>

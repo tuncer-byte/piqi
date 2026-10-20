@@ -53,4 +53,15 @@ describe('detectSleep', () => {
   it.each(['Görüşürüz arkadaşlar', 'Selam Piqi', 'Yarın görüşürüz'])('"%s" kapatmaz', (text) => {
     expect(detectSleep(text, ['Gece'])).toBe(false)
   })
+
+  it('Apple’ın Türkçe tanıyıcısının yazdığı "Selam peki" ile uyanır', () => {
+    expect(detectWake('Selam peki, rate limit kaç?')?.rest).toBe('rate limit kaç?')
+    expect(detectWake('Merhaba peki')).not.toBeNull()
+  })
+
+  it('"peki" ile başlayan sıradan cümleler Piqi’yi kapatmaz', () => {
+    expect(detectSleep('Peki kapat şunu')).toBe(false)
+    expect(detectSleep('Tamam, görüşürüz peki')).toBe(false)
+    expect(detectWake('Peki, rate limit kaç?')).toBeNull()
+  })
 })

@@ -19,8 +19,10 @@ import type {
   AskRequest,
   AudioChannel,
   CaptureStatus,
+  HealthIssue,
   IslandAction,
   NotchGeometry,
+  Permission,
   PermissionStatus,
   ProviderStatus,
   Settings
@@ -31,6 +33,7 @@ import { PROVIDER_PRESETS } from '@shared/providers'
 import { Assistant } from './assistant/Assistant'
 import { AudioService, type ScreenInfo } from './audio/AudioService'
 import { IslandController } from './island/IslandController'
+import { healthIssues } from './health'
 import { MeetingDetector } from './meeting/MeetingDetector'
 import { MeetingHistory } from './meeting/MeetingHistory'
 import { summarizeMeeting } from './meeting/summarize'
@@ -38,6 +41,7 @@ import { AuditLog } from './llm/AuditLog'
 import { LlmService } from './llm/LlmService'
 import { PolicyService } from './PolicyService'
 import { EmaEngine } from './speech/EmaEngine'
+import { EchoFilter } from './speech/echo'
 import { PeopleService } from './speech/PeopleService'
 import { SecretStore } from './SecretStore'
 import { SettingsStore } from './SettingsStore'
@@ -152,10 +156,11 @@ app.whenReady().then(async () => {
   let meeting = false
   /** Toplantı dinlemesini kim başlattı: dedektörün başlattığı dinleme görüşme bitince kendiliğinden durur. */
   let meetingBy: 'user' | 'detector' = 'user'
-  /** Algılanan görüşmenin uygulaması; "tüm sistem sesi" modunda yalnızca onun sesi dinlenir. */
+  /** Algılanan görüşmenin uygulaması (toplantı geçmişinde gösterilir). */
   let meetingApp: MeetingApp | null = null
   let captureTransition: Promise<void> = Promise.resolve()
-  const wakeAlways = (): boolean => settings.get().speech.wakeWord && settings.get().speech.alwaysListen
+  // Kurulum bitmeden dinleme başlamaz; izinler kurulum ekranından istenir.
+  const wakeAlways = (): boolean => settings.get().onboarded && settings.get().speech.wakeWord && settings.get().speech.alwaysListen
 
   const transcriptionConfig = (): { locale: string; channels: AudioChannel[]; contextual: string[] } => {
     const s = settings.get()
@@ -177,21 +182,50 @@ app.whenReady().then(async () => {
   }
   applySpeechConfig()
 
+  // ── İzinler ve sağlık: "dinliyor ama duymuyor" durumunu önle ve görünür kıl ──
+  let permissions: { mic: Permission; speech: Permission } = { mic: 'undetermined', speech: 'undetermined' }
+  // macOS 26+ SpeechAnalyzer konuşma tanıma izni istemez; yalnızca eski sürümlerde gerekir.
+  const speechPermissionNeeded = Number(process.getSystemVersion().split('.')[0]) < 26
+  const refreshPermissions = async (): Promise<void> => {
+    const before = permissions
+    permissions = await audio.permissions().catch(() => permissions)
+    publishHealth()
+    // İzin Sistem Ayarları'ndan sonradan açıldıysa yeniden başlatma gerekmesin.
+    if (before.speech !== 'granted' && permissions.speech === 'granted') applySpeechConfig()
+    if (before.mic !== 'granted' && permissions.mic === 'granted' && before.mic !== 'undetermined') void applyCapture()
+  }
+  const health = (): HealthIssue[] => {
+    const s = settings.get()
+    const preset = PROVIDER_PRESETS.find((p) => p.id === s.model.providerId)
+    const ready = preset ? !preset.keyRequired || secrets.status(preset.id).hasApiKey : false
+    const speech = speechPermissionNeeded ? permissions.speech : 'granted'
+    return healthIssues({ ...permissions, speech, status: audio.getStatus(), model: preset ? { name: preset.name, ready } : null })
+  }
+  let lastHealth = ''
+  const publishHealth = (): void => {
+    const issues = health()
+    const key = JSON.stringify(issues)
+    if (key === lastHealth) return
+    lastHealth = key
+    broadcast(IPC.healthChanged, issues)
+  }
+
+  /** Dinleme mikrofonu ve konuşma tanımayı birlikte gerektirir; ikisini de gerekirse ister. */
   const ensureMicPermission = async (): Promise<void> => {
-    const { mic } = await audio.permissions().catch(() => ({ mic: 'granted' as const }))
-    if (mic === 'undetermined') await audio.requestMicPermission()
+    await refreshPermissions()
+    // İzin penceresi yanıtsız kalsa ya da hata verse de dinleme başlasın; sorun sağlık bandında görünür.
+    const ask = (request: () => Promise<unknown>): Promise<unknown> =>
+      request().catch((error) => console.warn('[piqi] izin isteği tamamlanmadı:', error))
+    if (permissions.mic === 'undetermined') await ask(() => audio.requestMicPermission())
+    if (speechPermissionNeeded && permissions.speech === 'undetermined') await ask(() => audio.requestSpeechPermission())
+    await refreshPermissions()
   }
 
   /** Yakalamayı istenen moda getirir (gerekirse yeniden başlatır). */
   const applyCapture = (): Promise<void> => {
     const transition = captureTransition.catch(() => undefined).then(async () => {
       const capture = settings.get().capture
-      // Algılanan görüşmede tüm sistem sesi yerine yalnızca o uygulamayı dinle (müzik, bildirim vb. karışmasın).
-      const forMeeting =
-        meetingApp && capture.system && capture.bundleIds.length === 0
-          ? { ...capture, bundleIds: [...meetingApp.bundleIds, ...(meetingApp.detect ?? [])] }
-          : capture
-      const want = meeting ? forMeeting : wakeAlways() ? { ...capture, mic: true, system: false } : null
+      const want = meeting ? capture : wakeAlways() ? { ...capture, mic: true, system: false } : null
       applySpeechConfig()
       const status = audio.getStatus()
       if (status.state === 'running' || status.state === 'starting') await audio.stop()
@@ -250,7 +284,8 @@ app.whenReady().then(async () => {
     tray.refresh()
     broadcast(IPC.captureStatus, captureStatus())
   })
-  const syncDetector = (): void => (settings.get().meetingDetection === 'off' ? detector.stop() : detector.start())
+  const syncDetector = (): void =>
+    settings.get().meetingDetection === 'off' || !settings.get().onboarded ? detector.stop() : detector.start()
 
   const assistant = new Assistant({ llm, island, voice, transcripts, settings: getSettings, ensureMic, knowledge, gaps })
   island.on('saveFaq', (entry) => saveFaq(entry))
@@ -282,6 +317,7 @@ app.whenReady().then(async () => {
     }
     tray.refresh()
     broadcast(IPC.captureStatus, { ...captureStatus(), ...status })
+    publishHealth()
   })
   audio.on('levels', (levels) => broadcast(IPC.audioLevels, levels))
   audio.on('diarizer', (event) => people.setStatus(event.status, event.message))
@@ -291,7 +327,11 @@ app.whenReady().then(async () => {
     broadcast(IPC.peopleChanged, state)
   })
   ema.on('status', (status) => broadcast(IPC.ttsStatusChanged, status))
+  const echo = new EchoFilter()
   audio.on('transcript', (event) => {
+    if (event.channel === 'them' && event.final) echo.heardTheirs(event.text)
+    // Hoparlörle yapılan toplantıda karşı tarafın sesi mikrofona sızar; aynı cümle "ben" olarak işlenmesin.
+    if (meeting && event.channel === 'me' && event.final && echo.isEcho(event.text)) return
     if (event.channel === 'them' && event.speaker != null) people.heard(event.speaker)
     transcripts.add(event, people.label(event.speaker))
     if (meeting && event.final) {
@@ -369,11 +409,15 @@ app.whenReady().then(async () => {
   })
 
   const captureKey = (s: Settings): string =>
-    JSON.stringify([s.capture, s.speech.wakeWord, s.speech.alwaysListen])
+    JSON.stringify([s.capture, s.speech.wakeWord, s.speech.alwaysListen, s.onboarded])
   let lastCapture = captureKey(settings.get())
   syncDetector()
+  void refreshPermissions()
+  // Kullanıcı izni Sistem Ayarları'ndan verip Piqi'ye döndüğünde fark et.
+  app.on('browser-window-focus', () => void refreshPermissions())
   settings.on('change', (next: Settings) => {
     syncDetector()
+    publishHealth()
     history.prune(next.history.retentionDays)
     const key = captureKey(next)
     // Yakalama ya da uyandırma ayarı değişti: dinlemeyi yeni ayarlarla yeniden kur.
@@ -420,10 +464,36 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(IPC.permissionsGet, async (): Promise<PermissionStatus> => {
     const p = await audio.permissions().catch(() => ({ mic: 'undetermined' as const, speech: 'undetermined' as const }))
-    return { microphone: p.mic, speech: p.speech }
+    return { microphone: p.mic, speech: p.speech, speechRequired: speechPermissionNeeded }
   })
-  ipcMain.handle(IPC.permissionsRequestMic, () => audio.requestMicPermission())
-  ipcMain.handle(IPC.permissionsRequestSpeech, () => audio.requestSpeechPermission())
+  ipcMain.handle(IPC.permissionsRequestMic, async () => {
+    const result = await audio.requestMicPermission()
+    await refreshPermissions()
+    if (result === 'granted') void applyCapture()
+    return result
+  })
+  ipcMain.handle(IPC.permissionsRequestSpeech, async () => {
+    const result = await audio.requestSpeechPermission()
+    await refreshPermissions()
+    // İzin sonradan verildiyse tanımayı hemen kur; yeniden başlatma gerekmesin.
+    if (result === 'granted') applySpeechConfig()
+    return result
+  })
+  ipcMain.handle(IPC.permissionsTestSystemAudio, async () => {
+    if (meeting) return { ok: audio.getStatus().system }
+    // Toplantı sesini kısa süre yakala: izin ilk seferde burada sorulur; sonra önceki dinleme moduna dön.
+    const status = await audio.start({ mic: false, system: true, bundleIds: [] })
+    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    const ok = audio.getStatus().system
+    const error = audio.getStatus().errors.find((e) => e.startsWith('system:'))?.slice(7).trim()
+    await audio.stop()
+    await applyCapture()
+    return { ok: ok && status.state !== 'error', error }
+  })
+  ipcMain.handle(IPC.healthGet, async () => {
+    await refreshPermissions()
+    return health()
+  })
   ipcMain.on(IPC.permissionsOpenSystemSettings, (_event, pane: SystemSettingsPane) => {
     const anchor = { microphone: 'Privacy_Microphone', 'audio-capture': 'Privacy_AudioCapture', speech: 'Privacy_SpeechRecognition' }[pane]
     void shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${anchor}`)
@@ -433,6 +503,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.providerGetStatus, () => providerStatuses())
   ipcMain.handle(IPC.providerSetApiKey, (_event, providerId: string, key: string | null) => {
     secrets.setApiKey(providerId, key)
+    publishHealth()
     return providerStatuses()
   })
   ipcMain.handle(IPC.providerTest, () => llm.test())

@@ -23,6 +23,7 @@ import type {
   AudioLevels,
   AudioProcessInfo,
   CaptureStatus,
+  HealthIssue,
   IslandAction,
   IslandSnapshot,
   PermissionStatus,
@@ -55,6 +56,7 @@ export const IPC = {
   permissionsRequestMic: 'permissions:request-mic',
   permissionsRequestSpeech: 'permissions:request-speech',
   permissionsOpenSystemSettings: 'permissions:open-system-settings',
+  permissionsTestSystemAudio: 'permissions:test-system-audio',
 
   providerGetStatus: 'provider:get-status',
   providerSetApiKey: 'provider:set-api-key',
@@ -97,6 +99,8 @@ export const IPC = {
   faqList: 'faq:list',
   faqSave: 'faq:save',
   faqDelete: 'faq:delete',
+  healthGet: 'health:get',
+  healthChanged: 'health:changed',
   meetingsList: 'meetings:list',
   meetingsChanged: 'meetings:changed',
   meetingGet: 'meetings:get',
@@ -155,6 +159,8 @@ export interface PiqiApi {
     requestMicrophone(): Promise<PermissionStatus['microphone']>
     requestSpeech(): Promise<PermissionStatus['speech']>
     openSystemSettings(pane: SystemSettingsPane): void
+    /** Toplantı sesini kısa süre yakalamayı dener; macOS izni ilk seferde burada sorar. */
+    testSystemAudio(): Promise<{ ok: boolean; error?: string }>
   }
   provider: {
     /** Tüm sağlayıcıların anahtar durumu. */
@@ -188,6 +194,11 @@ export interface PiqiApi {
   }
   app: {
     onNavigate(cb: (page: string) => void): Unsubscribe
+  }
+  health: {
+    /** Piqi'nin sağlıklı çalışmasını engelleyen sorunlar (izin, ses, model); boşsa her şey hazır. */
+    get(): Promise<HealthIssue[]>
+    onChange(cb: (issues: HealthIssue[]) => void): Unsubscribe
   }
   meetings: {
     /** Geçmiş toplantılar, en yeni önce. */

@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "npm run build:native && npm run build:tts && electron-vite dev",
     "build": "npm run build:native && npm run build:tts && npm run icons && electron-vite build",
-    "build:native": "cd native/piqi-audio && swift build -c release && codesign --force --sign - --identifier io.github.tuncer-byte.piqi.audio .build/release/piqi-audio",
+    "build:native": "node scripts/build-native.mjs",
     "dist": "npm run build && electron-builder --mac",
     "dist:local": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac -c.mac.identity=- -c.mac.entitlements=build/entitlements.local.plist -c.mac.entitlementsInherit=build/entitlements.local.plist",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",

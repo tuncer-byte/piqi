@@ -3,6 +3,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Settings } from '@shared/types'
 import { useCaptureStatus, useSettings } from '../shared/hooks'
 import { ArrowLeft } from '../shared/icons'
+import { HealthBanner } from './HealthBanner'
+import { Onboarding } from './Onboarding'
 import { PiqiMark, Wordmark } from '../shared/PiqiMark'
 import { GapsPage, MeetingsPage } from './pages/Meetings'
 import { SourcesPage } from './pages/Sources'
@@ -23,6 +25,9 @@ export interface PageProps {
   settings: Settings
   update: (patch: Partial<Settings>) => void
   navigate: (page: Page) => void
+  /** Sayfa açılınca yapılacak iş (ör. kurulumdan sonra kaynak ekleme penceresini aç). */
+  intent?: 'add-source' | null
+  clearIntent?: () => void
 }
 
 const MENU: { page: Page; label: string }[] = [
@@ -46,11 +51,28 @@ const SETTINGS_MENU: { section: SettingsSection; label: string }[] = [
 export function App(): ReactNode {
   const [settings, update] = useSettings()
   const [page, setPage] = useState<Page>('sources')
+  const [intent, setIntent] = useState<PageProps['intent']>(null)
 
   useEffect(() => window.piqi.app.onNavigate((p) => setPage(p as Page)), [])
 
   if (!settings) return null
-  const props: PageProps = { settings, update, navigate: setPage }
+  // İlk açılış: izinler, model ve toplantı algılama bir kez kurulur.
+  if (!settings.onboarded) {
+    return (
+      <Shell title="Piqi · Kurulum">
+        <Onboarding
+          settings={settings}
+          update={update}
+          onFinish={(openSources) => {
+            update({ onboarded: true })
+            setPage('sources')
+            if (openSources) setIntent('add-source')
+          }}
+        />
+      </Shell>
+    )
+  }
+  const props: PageProps = { settings, update, navigate: setPage, intent, clearIntent: () => setIntent(null) }
   const inSettings = page.startsWith('settings/')
 
   return (
@@ -69,6 +91,7 @@ export function App(): ReactNode {
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
+              <HealthBanner navigate={setPage} />
               <PageContent page={page} props={props} />
             </motion.div>
           </AnimatePresence>

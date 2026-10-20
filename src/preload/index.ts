@@ -32,7 +32,8 @@ const api: PiqiApi = {
     get: () => ipcRenderer.invoke(IPC.permissionsGet),
     requestMicrophone: () => ipcRenderer.invoke(IPC.permissionsRequestMic),
     requestSpeech: () => ipcRenderer.invoke(IPC.permissionsRequestSpeech),
-    openSystemSettings: (pane) => ipcRenderer.send(IPC.permissionsOpenSystemSettings, pane)
+    openSystemSettings: (pane) => ipcRenderer.send(IPC.permissionsOpenSystemSettings, pane),
+    testSystemAudio: () => ipcRenderer.invoke(IPC.permissionsTestSystemAudio)
   },
   provider: {
     getStatus: () => ipcRenderer.invoke(IPC.providerGetStatus),
@@ -64,6 +65,10 @@ const api: PiqiApi = {
   },
   app: {
     onNavigate: (cb) => subscribe(IPC.navigate, cb)
+  },
+  health: {
+    get: () => ipcRenderer.invoke(IPC.healthGet),
+    onChange: (cb) => subscribe(IPC.healthChanged, cb)
   },
   meetings: {
     list: () => ipcRenderer.invoke(IPC.meetingsList),
